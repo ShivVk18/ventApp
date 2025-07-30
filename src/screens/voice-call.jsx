@@ -1,445 +1,346 @@
 import { useEffect, useState, useRef } from "react";
-import { Text, StyleSheet, Alert } from "react-native";
+import { Text, StyleSheet, Alert, View } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import GradientContainer from "../../components/ui/GradientContainer";
-import StatusBar from "../../components/ui/StatusBar";
-import SessionTimer from "../../components/session/SessionTimer";
-import ConnectionStatus from "../../components/session/ConnectionStatus";
-import VoiceControls from "../../components/session/VoiceControls";
-import useTimer from "../../hooks/useTimer";
-import { firestore } from "../../config/firebase.config";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
-
-import {
-  createAgoraRtcEngine,
-  ChannelProfileType,
-  ClientRoleType,
-} from "react-native-agora";
+import GradientContainer from "../components/ui/GradientContainer";
+import StatusBar from "../components/ui/StatusBar";
+import SessionTimer from "../components/session/SessionTimer";
+import ConnectionStatus from "../components/session/ConnectionStatus";
+import VoiceControls from "../components/voice/VoiceControls";
+import useTimer from "../hooks/useTimer";
+import VoiceCallService from "../services/VoiceCallService";
+import RoomService from "../services/RoomService";
+import { auth } from "../config/firebase.config";
 
 const AGORA_APP_ID = "f16b94ea49fd47b5b65e86d20ef1badd";
+
+/**
+ * @typedef {object} RouteParams
+ * @property {string} ventText
+ * @property {string} plan
+ * @property {string} channelName
+ * @property {boolean} isHost
+ * @property {boolean} isListener
+ */
 
 export default function VoiceCallScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  /** @type {RouteParams} */
+  const { ventText, plan, channelName, isHost, isListener } = route.params;
 
-  const { ventText, plan, channelName, isHost } = route.params;
-
+  // State management
   const [isJoined, setIsJoined] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeakerEnabled, setIsSpeakerEnabled] = useState(true);
   const [remoteUserIds, setRemoteUserIds] = useState([]);
-  const [connectionStatus, setConnectionStatus] = useState("connecting"); // connecting, connected, failed, reconnecting
-  const engine = useRef(null);
+  const [connectionStatus, setConnectionStatus] = useState("requesting_permissions");
   const [localUid, setLocalUid] = useState(0);
-  const joinAttempts = useRef(0);
-  const maxJoinAttempts = 3;
+  const [permissionsGranted, setPermissionsGranted] = useState(false);
 
-  const getDurationInSeconds = (planName) => {
-    switch (planName) {
-      case "10-Min Vent":
-        return 10 * 60;
-      case "30-Min Vent":
-        return 30 * 60;
-      default:
-        return 20 * 60;
-    }
-  };
+  const roomUnsubscribeRef = useRef(null);
 
-  const initialCallDuration = getDurationInSeconds(plan);
+  // Timer configuration
+  const initialCallDuration = RoomService.getDurationInSeconds(plan);
 
   const handleTimeUp = () => {
     Alert.alert("Session Ended", "Your session has ended automatically.", [
       {
         text: "OK",
         onPress: async () => {
-          await destroyAgora();
-          await updateRoomStatusInFirebase("ended");
-          navigation.navigate("SessionEnd", {
-            sessionTime: initialCallDuration,
-            plan,
-            autoEnded: true,
-          })
+          await handleEndCall(true);
         },
       },
     ]);
   };
 
-  const { sessionTime, timeRemaining, stopTimer } = useTimer(initialCallDuration, handleTimeUp);
+  const { sessionTime, timeRemaining, stopTimer } = useTimer(
+    initialCallDuration,
+    handleTimeUp
+  );
 
-  
-  const joinChannelWithRetry = async (engine, channelName, uid) => {
-    joinAttempts.current++;
-
-    try {
-      console.log(`Agora: Join attempt ${joinAttempts.current}/${maxJoinAttempts}`);
-
-      await engine.joinChannel(null, channelName, uid, {
-        autoSubscribeAudio: true,
-        autoSubscribeVideo: false,
-        publishMicrophoneTrack: true,
-        publishCameraTrack: false,
-      });
-
-      console.log("Agora: Successfully joined channel", channelName, "with UID", uid);
-      joinAttempts.current = 0; // Reset on success
-    } catch (error) {
-      console.error(`Agora: Join attempt ${joinAttempts.current} failed:`, error);
-
-      if (joinAttempts.current < maxJoinAttempts) {
-        console.log(`Agora: Retrying in 2 seconds...`);
-        setConnectionStatus("reconnecting");
-
-        setTimeout(() => {
-          joinChannelWithRetry(engine, channelName, uid);
-        }, 2000);
-      } else {
-        console.error("Agora: Max join attempts reached");
-        setConnectionStatus("failed");
-        Alert.alert(
-          "Connection Failed",
-          "Unable to connect to voice channel after multiple attempts. Please check your internet connection and try again.",
-          [
-            {
-              text: "Retry",
-              onPress: () => {
-                joinAttempts.current = 0;
-                setConnectionStatus("connecting");
-                joinChannelWithRetry(engine, channelName, uid);
-              },
-            },
-            {
-              text: "Exit",
-              onPress: () => {
-                navigation.navigate("SessionEnd", {
-            sessionTime: initialCallDuration,
-            plan,
-            autoEnded: true,
-          });
-              },
-            },
-          ]
-        );
-      }
-    }
-  };
-
-  const initAgora = async () => {
-    try {
-      if (!AGORA_APP_ID) {
-        Alert.alert("Agora App ID Missing");
-        navigation.replace("Dashboard");
-        return;
-      }
-
-      console.log("Agora: Initializing engine...");
-      engine.current = createAgoraRtcEngine();
-
-      await engine.current.initialize({
-        appId: AGORA_APP_ID,
-        channelProfile: ChannelProfileType.ChannelProfileCommunication,
-      });
-
-      const clientRole = isHost
-        ? ClientRoleType.ClientRoleBroadcaster // Listeners can speak now
-        : ClientRoleType.ClientRoleBroadcaster; // Venter is always a broadcaster
-
-      // Add network and audio optimizations
-      await engine.current.setChannelProfile(ChannelProfileType.ChannelProfileCommunication);
-      await engine.current.setClientRole(clientRole);
-
-      // Enable audio with better settings
-      await engine.current.enableAudio();
-      await engine.current.setAudioProfile(0, 1); // Default profile, speech standard
-      await engine.current.setEnableSpeakerphone(true);
-
-      // Add network resilience settings
-      await engine.current.enableDualStreamMode(false); // Disable dual stream for voice-only
-
-      setIsSpeakerEnabled(true);
-
-      engine.current.registerEventHandler({
-        onJoinChannelSuccess: (connection, elapsed) => {
-          console.log("Agora: Join channel success", connection);
-          setIsJoined(true);
-          setConnectionStatus("connected");
-          setLocalUid(connection.localUid || 0);
-          engine.current?.muteLocalAudioStream(false);
-          setIsMuted(false);
-          joinAttempts.current = 0; // Reset attempts on successful join
-
-          // Test if connection is actually working
-          setTimeout(() => {
-            if (engine.current) {
-              console.log("Agora: Testing connection stability...");
-              // Try to get connection stats to verify connection
-              engine.current
-                .getCallId()
-                .then((callId) => {
-                  console.log("Agora: Connection verified - Call ID:", callId);
-                })
-                .catch((e) => {
-                  console.log("Agora: Connection test failed:", e);
-                });
-            }
-          }, 3000);
-        },
-
-        onUserJoined: (connection, remoteUid, elapsed) => {
-          console.log("Agora: User joined", remoteUid);
-          setRemoteUserIds((prev) => {
-            if (!prev.includes(remoteUid)) return [...prev, remoteUid];
-            return prev;
-          });
-        },
-
-        onUserOffline: (connection, remoteUid, reason) => {
-          console.log("Agora: User offline", remoteUid, reason);
-          setRemoteUserIds((prev) => prev.filter((id) => id !== remoteUid));
-        },
-
-        onError: (err, msg) => {
-          console.error("Agora Error:", err, msg);
-
-          // Handle specific error codes
-          if (err === 110) {
-            console.log("Agora: Error 110 - Known false positive, ignoring...");
-            // Completely ignore error 110 as it's a known Agora SDK false positive
-            return;
-          } else if (err === 101) {
-            setConnectionStatus("failed");
-            Alert.alert("Invalid App ID", "Voice service configuration error.");
-          } else if (err === 2) {
-            console.log("Agora: Invalid argument error - this is often recoverable");
-          } else if (err === 17) {
-            console.log("Agora: Not initialized error - reinitializing...");
-            setTimeout(() => {
-              initAgora();
-            }, 1000);
-          } else {
-            console.log(`Agora: Error ${err} - ${msg}`);
-            // Don't show alert for every error, many are recoverable
-          }
-        },
-
-        onLeaveChannel: (connection, stats) => {
-          console.log("Agora: Left channel", stats);
-          setIsJoined(false);
-          setRemoteUserIds([]);
-          setLocalUid(0);
-          setConnectionStatus("connecting");
-          stopTimer();
-        },
-
-        onConnectionStateChanged: (connection, state, reason) => {
-          console.log("Agora: Connection State Changed", state, reason);
-
-          // Update connection status based on Agora states
-          switch (state) {
-            case 1: // DISCONNECTED
-              setConnectionStatus("connecting");
-              break;
-            case 2: // CONNECTING
-              setConnectionStatus("connecting");
-              break;
-            case 3: // CONNECTED
-              setConnectionStatus("connected");
-              break;
-            case 4: // RECONNECTING
-              setConnectionStatus("reconnecting");
-              break;
-            case 5: // FAILED
-              console.log("Agora: Connection state FAILED - reason:", reason);
-              // Only treat as real failure if we never successfully joined
-              if (!isJoined && joinAttempts.current < maxJoinAttempts) {
-                console.log("Agora: Will retry due to connection state failure");
-                setTimeout(() => {
-                  const uid = Math.floor(Math.random() * 1000000);
-                  joinChannelWithRetry(engine.current, channelName, uid);
-                }, 2000);
-              } else if (!isJoined) {
-                setConnectionStatus("failed");
-                Alert.alert("Connection Failed", "Unable to establish voice connection. Please try again.");
-              } else {
-                console.log("Agora: Connection failed but we're joined - might be false positive");
-              }
-              break;
-          }
-        },
-
-        onRejoinChannelSuccess: (connection, elapsed) => {
-          console.log("Agora: Rejoin channel success");
-          setIsJoined(true);
-          setConnectionStatus("connected");
-        },
-
-        onConnectionLost: (connection) => {
-          console.log("Agora: Connection lost");
-          setConnectionStatus("reconnecting");
-        },
-
-        onConnectionInterrupted: (connection) => {
-          console.log("Agora: Connection interrupted");
-          setConnectionStatus("reconnecting");
-        },
-      });
-
-      if (!channelName) {
-        Alert.alert("Room Error", "No channel name provided.");
-        navigation.replace("Dashboard");
-        return;
-      }
-
-      const uid = Math.floor(Math.random() * 1000000);
-      console.log("Agora: Starting channel join process...");
-
-      // Try a simpler join first
-      try {
-        await engine.current.joinChannel(null, channelName, uid, {
-          autoSubscribeAudio: true,
-          autoSubscribeVideo: false,
-          publishMicrophoneTrack: true,
-          publishCameraTrack: false,
-        });
-        console.log("Agora: Join channel initiated for", channelName, "with UID", uid);
-      } catch (joinError) {
-        console.error("Agora: Direct join failed, using retry logic:", joinError);
-        await joinChannelWithRetry(engine.current, channelName, uid);
-      }
-    } catch (e) {
-      console.error("Agora Init Error:", e);
-      setConnectionStatus("failed");
-      Alert.alert("Call Setup Failed", e.message || e.toString());
-      navigation.replace("Dashboard");
-    }
-  };
-
-  const destroyAgora = async () => {
-    if (engine.current) {
-      try {
-        console.log("Agora: Cleaning up...");
-        await engine.current.leaveChannel();
-        engine.current.release();
-        engine.current = null;
-        setConnectionStatus("connecting");
-      } catch (error) {
-        console.error("Agora Cleanup Error:", error);
-      }
-    }
-  };
-
-  const updateRoomStatusInFirebase = async (status) => {
-    if (channelName) {
-      try {
-        const roomRef = doc(firestore, "rooms", channelName);
-        await updateDoc(roomRef, {
-          status,
-          endTime: serverTimestamp(),
-        });
-        console.log("Firebase: Room status updated to", status);
-      } catch (error) {
-        console.error("Firebase Update Error:", error);
-      }
-    }
-  };
-
+  // Initialize voice call service
   useEffect(() => {
-    initAgora();
-    return () => {
-      stopTimer();
-      destroyAgora();
-      if (isJoined) updateRoomStatusInFirebase("ended");
+    const initializeVoiceCall = async () => {
+      try {
+        console.log("🎬 Initializing voice call...", {
+          channelName,
+          isHost,
+          isListener,
+          plan,
+        });
+
+        // Request permissions
+        setConnectionStatus("requesting_permissions");
+        const hasPermissions = await VoiceCallService.requestPermissions();
+
+        if (!hasPermissions) {
+          Alert.alert(
+            "Permission Required",
+            "Microphone access is required for voice calls.",
+            [{ text: "OK", onPress: () => navigation.goBack() }]
+          );
+          return;
+        }
+
+        setPermissionsGranted(true);
+        setConnectionStatus("connecting");
+
+        // Initialize voice service
+        const initialized = await VoiceCallService.initialize({
+          appId: AGORA_APP_ID,
+          channelName,
+          token: null,
+          isHost,
+          onJoinSuccess: handleJoinSuccess,
+          onUserJoined: handleUserJoined,
+          onUserLeft: handleUserLeft,
+          onConnectionStateChanged: handleConnectionStateChanged,
+          onError: handleVoiceError,
+        });
+
+        if (!initialized) {
+          throw new Error("Failed to initialize voice service");
+        }
+
+        // Join channel
+        const joined = await VoiceCallService.joinChannel();
+        if (!joined) {
+          throw new Error("Failed to join voice channel");
+        }
+      } catch (error) {
+        console.error("❌ Voice call initialization failed:", error);
+        setConnectionStatus("failed");
+        Alert.alert("Connection Failed", "Unable to initialize voice call.");
+      }
     };
-  }, []);
 
-  const toggleMute = async () => {
-    if (engine.current && isJoined) {
-      try {
-        const newMutedState = !isMuted;
-        await engine.current.muteLocalAudioStream(newMutedState);
-        setIsMuted(newMutedState);
-      } catch (error) {
-        console.error("Toggle mute error:", error);
-        Alert.alert("Error", "Failed to toggle microphone");
+    initializeVoiceCall();
+
+    // Cleanup on unmount
+    return () => {
+      console.log("🧹 Cleaning up voice call...");
+      stopTimer();
+      VoiceCallService.destroy();
+      if (roomUnsubscribeRef.current) {
+        roomUnsubscribeRef.current();
+      }
+    };
+  }, [channelName, isHost, isListener, navigation, plan]);
+
+  // Room status listener
+  useEffect(() => {
+    if (channelName) {
+      roomUnsubscribeRef.current = RoomService.listenToRoom(channelName, (room) => {
+        if (room) {
+          console.log("📡 Room status update:", room.status);
+
+          // Handle room ending
+          if (room.status === "ended" && isJoined) {
+            Alert.alert("Session Ended", "The session has been ended by the host.", [
+              { text: "OK", onPress: () => navigation.goBack() },
+            ]);
+          }
+        }
+      });
+    }
+
+    return () => {
+      if (roomUnsubscribeRef.current) {
+        roomUnsubscribeRef.current();
+      }
+    };
+  }, [channelName, isJoined, navigation]);
+
+  // Voice call event handlers
+  const handleJoinSuccess = async (uid) => {
+    console.log("🎉 Successfully joined voice channel:", uid);
+    setIsJoined(true);
+    setLocalUid(uid);
+    setConnectionStatus("connected");
+
+    // Update room status
+    const user = auth.currentUser;
+    if (user) {
+      await RoomService.updateParticipantConnection(channelName, user.uid, true, uid);
+
+      if (isHost) {
+        await RoomService.updateRoomStatus(channelName, "active");
       }
     }
   };
 
-  const toggleSpeaker = async () => {
-    if (engine.current && isJoined) {
-      try {
-        const newSpeakerState = !isSpeakerEnabled;
-        await engine.current.setEnableSpeakerphone(newSpeakerState);
-        setIsSpeakerEnabled(newSpeakerState);
-      } catch (error) {
-        console.error("Toggle speaker error:", error);
-        Alert.alert("Error", "Failed to toggle speaker");
+  const handleUserJoined = (uid) => {
+    console.log("👤 Remote user joined:", uid);
+    setRemoteUserIds((prev) => {
+      if (!prev.includes(uid)) {
+        return [...prev, uid];
       }
+      return prev;
+    });
+  };
+
+  const handleUserLeft = (uid) => {
+    console.log("👋 Remote user left:", uid);
+    setRemoteUserIds((prev) => prev.filter((id) => id !== uid));
+  };
+
+  const handleConnectionStateChanged = (state) => {
+    console.log("🔗 Connection state:", state);
+
+    switch (state) {
+      case "CONNECTING":
+        setConnectionStatus("connecting");
+        break;
+      case "CONNECTED":
+        setConnectionStatus("connected");
+        break;
+      case "RECONNECTING":
+        setConnectionStatus("reconnecting");
+        break;
+      case "FAILED":
+        setConnectionStatus("failed");
+        break;
+      case "DISCONNECTED":
+        setConnectionStatus("connecting");
+        break;
+      default:
+        console.warn(`Unhandled connection state: ${state}`);
+        break;
     }
   };
 
-  const handleEndCall = async () => {
-    Alert.alert("End Session", "Are you sure you want to end this session?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "End",
-        onPress: async () => {
-          stopTimer();
-          await destroyAgora();
-          await updateRoomStatusInFirebase("ended");
-          navigation.navigate("SessionEnd", {
-            sessionTime,
-            plan,
-            autoEnded: false,
-          });
+  const handleVoiceError = (error) => {
+    console.error("❌ Voice call error:", error);
+
+    if (error.code === 101) {
+      Alert.alert("Configuration Error", "Invalid App ID or configuration.");
+    } else if (error.code === 109) {
+      Alert.alert("Session Expired", "Please restart the session.");
+    } else if (error.code === 110) {
+      Alert.alert("Token Invalid", "The authentication token is invalid. Please restart the app.");
+    } else {
+      console.log("⚠️ Non-critical voice error:", error);
+    }
+  };
+
+  // Control handlers
+  const handleToggleMute = async () => {
+    const success = await VoiceCallService.toggleMute(!isMuted);
+    if (success) {
+      setIsMuted(!isMuted);
+    } else {
+      Alert.alert("Error", "Failed to toggle microphone");
+    }
+  };
+
+  const handleToggleSpeaker = async () => {
+    const success = await VoiceCallService.toggleSpeaker(!isSpeakerEnabled);
+    if (success) {
+      setIsSpeakerEnabled(!isSpeakerEnabled);
+    } else {
+      Alert.alert("Error", "Failed to toggle speaker");
+    }
+  };
+
+  const handleEndCall = async (autoEnded = false) => {
+    if (!autoEnded) {
+      Alert.alert("End Session", "Are you sure you want to end this session?", [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "End",
+          onPress: async () => {
+            await performEndCall(false);
+          },
         },
-      },
-    ]);
+      ]);
+    } else {
+      await performEndCall(true);
+    }
   };
 
-  const handleRetryConnection = () => {
-    joinAttempts.current = 0;
+  const performEndCall = async (autoEnded) => {
+    console.log("👋 Ending call...", { autoEnded });
+
+    try {
+      stopTimer();
+
+      await VoiceCallService.destroy();
+
+      await RoomService.leaveRoom(channelName, isListener);
+
+      navigation.navigate("SessionEnd", {
+        sessionTime,
+        plan,
+        autoEnded,
+      });
+    } catch (error) {
+      console.error("❌ Error ending call:", error);
+      navigation.goBack();
+    }
+  };
+
+  const handleRetryConnection = async () => {
+    console.log("🔄 Retrying connection...");
     setConnectionStatus("connecting");
-    if (engine.current && channelName) {
-      const uid = Math.floor(Math.random() * 1000000);
-      joinChannelWithRetry(engine.current, channelName, uid);
+
+    try {
+      const joined = await VoiceCallService.joinChannel();
+      if (!joined) {
+        setConnectionStatus("failed");
+      }
+    } catch (error) {
+      console.error("❌ Retry failed:", error);
+      setConnectionStatus("failed");
     }
   };
 
   return (
     <GradientContainer>
       <StatusBar />
-      <SessionTimer sessionTime={sessionTime} timeRemaining={timeRemaining} plan={plan} />
-      <Text style={styles.ventTextDisplay}>{ventText}</Text>
 
-      <ConnectionStatus
-        joined={isJoined}
-        remoteUsers={remoteUserIds}
-        timeRemaining={timeRemaining}
-        connectionStatus={connectionStatus}
-        onRetry={handleRetryConnection}
-      />
+      <View style={styles.container}>
+        <SessionTimer sessionTime={sessionTime} timeRemaining={timeRemaining} plan={plan} />
 
-      <VoiceControls
-        muted={isMuted}
-        speakerEnabled={isSpeakerEnabled}
-        onToggleMute={toggleMute}
-        onToggleSpeaker={toggleSpeaker}
-        onEndCall={handleEndCall}
-        disabled={!isJoined}
-        connectionStatus={connectionStatus}
-      />
+        <Text style={styles.ventTextDisplay}>{ventText}</Text>
+
+        <ConnectionStatus
+          joined={isJoined}
+          remoteUsers={remoteUserIds}
+          timeRemaining={timeRemaining}
+          connectionStatus={connectionStatus}
+          onRetry={handleRetryConnection}
+          isHost={isHost}
+        />
+
+        <VoiceControls
+          muted={isMuted}
+          speakerEnabled={isSpeakerEnabled}
+          onToggleMute={handleToggleMute}
+          onToggleSpeaker={handleToggleSpeaker}
+          onEndCall={() => handleEndCall(false)}
+          disabled={!isJoined || connectionStatus === "requesting_permissions"}
+          connectionStatus={connectionStatus}
+        />
+      </View>
     </GradientContainer>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
   ventTextDisplay: {
-    color: "rgba(255, 255, 255, 0.6)", // Slightly darker white for contrast and readability
+    color: "rgba(255, 255, 255, 0.8)",
     fontSize: 16,
     textAlign: "center",
-    marginBottom: 32, // Adjusted from 30 to align with common spacing (theme.spacing.xl)
+    marginBottom: 32,
     fontStyle: "italic",
-    paddingHorizontal: 24, // Adjusted from 20 to align with common spacing (theme.spacing.lg)
-    lineHeight: 22, // Added for better readability of longer text
+    paddingHorizontal: 24,
+    lineHeight: 22,
+    maxHeight: 100,
   },
 });
