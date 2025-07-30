@@ -18,6 +18,8 @@ import {
 import { Alert } from "react-native"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import IdGenerator from "../utils/idGenerator"
+import { addDoc, collection, serverTimestamp } from "firebase/firestore"
+import {  firestore } from "../config/firebase.config"
 
 // Constants
 const AuthContext = createContext({})
@@ -93,11 +95,13 @@ export const AuthProvider = ({ children }) => {
   // Anonymous login
   const signInAnonymous = useCallback(async () => {
   try {
-    
     setAuthState(AUTH_STATES.SIGNING_IN)
-    
     const result = await signInAnonymously(auth)
-    
+    await addDoc(collection(firestore, "users"), {
+            userId: result.user.uid,
+            createdAt: serverTimestamp(),
+            isAnonymous: result.user.isAnonymous,
+    });
     return result.user
   } catch (err) {
     console.error("=== AUTH CONTEXT ERROR ===")

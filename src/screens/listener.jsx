@@ -1,47 +1,47 @@
 import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, RefreshControl } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import GradientContainer from "../../components/ui/GradientContainer";
-import StatusBar from "../../components/ui/StatusBar";
-import Button from "../../components/ui/Button";
-import { useAuth } from "../../context/AuthContext";
-import { firestore } from "../../config/firebase.config";
-import { collection, query, where, onSnapshot, orderBy, limit } from "firebase/firestore";
+import GradientContainer from "../components/ui/GradientContainer";
+import StatusBar from "../components/ui/StatusBar";
+import Button from "../components/ui/Button";
+import RoomService from "../services/RoomService"; // Ensure this is the JS version
+import VoiceCallService from "../services/VoiceCallService"; // Ensure this is the JS version
 
-export default function RoomBrowserScreen() {
+// JSDoc for Room type, as interfaces are not used in JS
+/**
+ * @typedef {object} Room
+ * @property {string} id
+ * @property {string} venterId
+ * @property {string} venterEmail
+ * @property {string} ventText
+ * @property {string} plan
+ * @property {"waiting" | "active" | "ended"} status
+ * @property {Date | null} createdAt // Now explicitly Date or null after toDate() conversion
+ * @property {string} [listenerId]
+ * @property {string} [listenerEmail]
+ * @property {Date | null} [startTime] // Now explicitly Date or null after toDate() conversion
+ * @property {Date | null} [endTime] // Now explicitly Date or null after toDate() conversion
+ * @property {number} currentListeners
+ * @property {number} maxListeners
+ * @property {boolean} allowListeners
+ * @property {any} lastActivity // Firebase Timestamp
+ */
+
+
+export default function ListenerBrowserScreen() {
   const navigation = useNavigation();
-  const { userInfo } = useAuth();
-  
+
+  /** @type {[Room[], React.Dispatch<React.SetStateAction<Room[]>>]} */
   const [availableRooms, setAvailableRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    // Listen to active rooms in real-time
-    const roomsQuery = query(
-      collection(firestore, "rooms"),
-      where("status", "==", "waiting"),
-      where("allowListeners", "==", true), // Only rooms that allow listeners
-      orderBy("createdAt", "desc"),
-      limit(20)
-    );
+    console.log("📡 Starting to listen for available rooms...");
 
-    const unsubscribe = onSnapshot(roomsQuery, (snapshot) => {
-      const rooms = [];
-      snapshot.forEach((doc) => {
-        const roomData = doc.data();
-        rooms.push({
-          id: doc.id,
-          ...roomData,
-          createdAt: roomData.createdAt?.toDate(),
-        });
-      });
-      
+    const unsubscribe = RoomService.listenToAvailableRooms((rooms) => {
+      console.log("📡 Available rooms updated:", rooms.length);
       setAvailableRooms(rooms);
-      setLoading(false);
-      setRefreshing(false);
-    }, (error) => {
-      console.error("Error fetching rooms:", error);
       setLoading(false);
       setRefreshing(false);
     });
@@ -49,78 +49,147 @@ export default function RoomBrowserScreen() {
     return () => unsubscribe();
   }, []);
 
-  const handleJoinAsListener = (room) => {
+  /**
+   * Handles joining a room as a listener.
+   * @param {Room} room - The room object to join.
+   */
+  const handleJoinAsListener = async (room) => {
+    console.log("🎧 Attempting to join room as listener:", room.id);
+
+    // Check room availability
+    if (room.status === "ended") {
+      Alert.alert("Session Ended", "This vent session has already ended.");
+      return;
+    }
+
+    if (room.currentListeners >= room.maxListeners) {
+      Alert.alert("Session Full", "This vent session is already at maximum capacity.");
+      return;
+    }
+
+    // Request permissions first
+    const hasPermissions = await VoiceCallService.requestPermissions();
+    if (!hasPermissions) {
+      Alert.alert("Permission Required", "Microphone access is required to join voice sessions.");
+      return;
+    }
+
     Alert.alert(
       "Join as Listener",
-      `Join "${room.ventText?.slice(0, 50)}..." as a listener?\n\nYou'll be able to hear as well as speak.`,
+      `Join "${room.ventText?.slice(0, 50)}..." as a listener?\n\nYou'll be able to hear the venter and speak to provide support.`,
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Join",
-          onPress: () => {
-            navigation.navigate("VoiceCall", {
-              channelName: room.id,
-              isHost: false,
-              isListener: true, // New flag to indicate listener mode
-              ventText: room.ventText,
-              plan: room.plan,
-              roomCreator: room.createdBy
-            });
-          }
-        }
-      ]
+          text: "Join Session",
+          onPress: async () => {
+            try {
+              // Join room in Firebase
+              const success = await RoomService.joinRoomAsListener(room.id);
+              if (!success) {
+                Alert.alert("Error", "Failed to join the session.");
+                return;
+              }
+
+              console.log("✅ Navigating to voice call as listener");
+              navigation.navigate("VoiceCall", {
+                channelName: room.id,
+                isHost: false,
+                isListener: true,
+                ventText: room.ventText,
+                plan: room.plan,
+              });
+            } catch (error) {
+              console.error("❌ Failed to join room:", error);
+              Alert.alert("Error", "Failed to join the session.");
+            }
+          },
+        },
+      ],
     );
   };
 
   const handleRefresh = () => {
+    console.log("🔄 Refreshing room list...");
     setRefreshing(true);
+    // The useEffect listener will automatically update `availableRooms` when new data comes.
+    // So, we just need to set `refreshing` to true, and it will be set to false by the listener.
   };
 
+  /**
+   * Formats a date into a human-readable "time ago" string.
+   * @param {Date | null} date - The date to format.
+   * @returns {string} The formatted time ago string.
+   */
   const formatTimeAgo = (date) => {
     if (!date) return "Unknown";
     const now = new Date();
-    const diffMs = now - date;
+    const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
-    
+
     if (diffMins < 1) return "Just now";
     if (diffMins < 60) return `${diffMins}m ago`;
-    
+
     const diffHours = Math.floor(diffMins / 60);
     if (diffHours < 24) return `${diffHours}h ago`;
-    
+
     const diffDays = Math.floor(diffHours / 24);
     return `${diffDays}d ago`;
   };
 
-  const renderRoomItem = ({ item: room }) => (
-    <TouchableOpacity 
-      style={styles.roomCard}
-      onPress={() => handleJoinAsListener(room)}
-    >
-      <View style={styles.roomHeader}>
-        <View style={styles.roomInfo}>
-          <Text style={styles.roomPlan}>{room.plan}</Text>
-          <Text style={styles.roomTime}>{formatTimeAgo(room.createdAt)}</Text>
+  /**
+   * Returns status indicator properties for a room.
+   * @param {Room} room - The room object.
+   * @returns {{color: string, text: string, emoji: string}} Status information.
+   */
+  const getStatusIndicator = (room) => {
+    switch (room.status) {
+      case "waiting":
+        return { color: "#fbbf24", text: "WAITING", emoji: "⏳" };
+      case "active":
+        return { color: "#ef4444", text: "LIVE", emoji: "🔴" };
+      default:
+        return { color: "#6b7280", text: "UNKNOWN", emoji: "❓" };
+    }
+  };
+
+  /**
+   * Renders a single room item in the FlatList.
+   * @param {{ item: Room }} - The FlatList item object containing the room.
+   */
+  const renderRoomItem = ({ item: room }) => {
+    const statusInfo = getStatusIndicator(room);
+
+    return (
+      <TouchableOpacity style={styles.roomCard} onPress={() => handleJoinAsListener(room)}>
+        <View style={styles.roomHeader}>
+          <View style={styles.roomInfo}>
+            <Text style={styles.roomPlan}>{room.plan}</Text>
+            <Text style={styles.roomTime}>{formatTimeAgo(room.createdAt)}</Text>
+          </View>
+          <View style={styles.listenerCount}>
+            <Text style={styles.listenerText}>
+              👥 {room.currentListeners}/{room.maxListeners}
+            </Text>
+          </View>
         </View>
-        <View style={styles.listenerCount}>
-          <Text style={styles.listenerText}>👥 {room.currentListeners || 0}</Text>
+
+        <Text style={styles.ventText} numberOfLines={3}>
+          {room.ventText || "Anonymous vent session"}
+        </Text>
+
+        <View style={styles.roomFooter}>
+          <View style={styles.statusContainer}>
+            <View style={[styles.statusIndicator, { backgroundColor: statusInfo.color }]} />
+            <Text style={[styles.statusText, { color: statusInfo.color }]}>
+              {statusInfo.emoji} {statusInfo.text}
+            </Text>
+          </View>
+
+          <Text style={styles.joinText}>{room.status === "waiting" ? "Tap to join" : "Tap to listen"}</Text>
         </View>
-      </View>
-      
-      <Text style={styles.ventText} numberOfLines={3}>
-        {room.ventText || "Anonymous vent session"}
-      </Text>
-      
-      <View style={styles.roomFooter}>
-        <View style={styles.statusContainer}>
-          <View style={styles.liveIndicator} />
-          <Text style={styles.liveText}>LIVE</Text>
-        </View>
-        
-        <Text style={styles.joinText}>Tap to listen</Text>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   if (loading) {
     return (
@@ -136,7 +205,7 @@ export default function RoomBrowserScreen() {
   return (
     <GradientContainer>
       <StatusBar />
-      
+
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>Live Vent Sessions</Text>
@@ -150,7 +219,7 @@ export default function RoomBrowserScreen() {
               There are no live vent sessions right now.{"\n"}
               Check back later or start your own session!
             </Text>
-            
+
             <Button
               title="Start Your Own Session"
               onPress={() => navigation.navigate("Vent")}
@@ -163,13 +232,7 @@ export default function RoomBrowserScreen() {
             keyExtractor={(item) => item.id}
             renderItem={renderRoomItem}
             contentContainerStyle={styles.listContainer}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={handleRefresh}
-                tintColor="white"
-              />
-            }
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="white" />}
             showsVerticalScrollIndicator={false}
           />
         )}
@@ -276,15 +339,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  liveIndicator: {
+  statusIndicator: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#ef4444",
     marginRight: 6,
   },
-  liveText: {
-    color: "#ef4444",
+  statusText: {
     fontSize: 12,
     fontWeight: "bold",
   },
