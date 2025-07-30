@@ -1,28 +1,41 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import Dashboardscreen from './src/screens/dashboard-screen';
+import Listener from './src/screens/listener';
+import SessionEnd from './src/screens/session-end';
+import Vent from './src/screens/vent';
+import VentSubmitted from './src/screens/vent-submitted';
+import VoiceCall from './src/screens/voice-call';
+import WelcomeScreen from './src/screens/index';
+import { AuthProvider } from './context/AuthContext';
 
-import { NewAppScreen } from '@react-native/new-app-screen';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
+const Stack = createNativeStackNavigator();
 
-function App() {
-  const isDarkMode = useColorScheme() === 'dark';
 
+const StacknNavigator =  () => {
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <NewAppScreen templateFileName="App.tsx" />
-    </View>
+    <Stack.Navigator initialRouteName="WelcomeScreen">
+      <Stack.Screen name="WelcomeScreen" component={WelcomeScreen} />
+      <Stack.Screen name="Dashboard" component={Dashboardscreen} />
+      <Stack.Screen name="Listener" component={Listener} />
+      <Stack.Screen name="SessionEnd" component={SessionEnd} />
+      <Stack.Screen name="Vent" component={Vent} />
+      <Stack.Screen name="VentSubmitted" component={VentSubmitted} />
+      <Stack.Screen name="VoiceCall" component={VoiceCall} />
+    </Stack.Navigator>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-});
+const App = () =>  {
+  
+  return (
+    <AuthProvider>
+      <NavigationContainer>
+        <StacknNavigator />
+      </NavigationContainer>
+    </AuthProvider>
+  );
+}
 
 export default App;
