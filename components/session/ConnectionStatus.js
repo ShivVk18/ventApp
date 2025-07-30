@@ -25,9 +25,7 @@ const ConnectionStatus = ({ joined, remoteUsers, timeRemaining, status, statusCo
         </View>
       )}
 
-      <View style={styles.expoGoIndicator}>
-        <Text style={styles.expoGoText}>📱 Expo Go Compatible</Text>
-      </View>
+      
     </View>
   )
 }
@@ -35,47 +33,47 @@ const ConnectionStatus = ({ joined, remoteUsers, timeRemaining, status, statusCo
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
-    marginBottom: 50,
+    marginBottom: 48, // theme.spacing.xxl
   },
   statusText: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 10,
+    fontSize: 24, // theme.typography.h2.fontSize
+    fontWeight: "bold", // theme.typography.h2.fontWeight
+    marginBottom: 16, // theme.spacing.md
     textAlign: "center",
   },
   participantsText: {
-    color: "rgba(255, 255, 255, 0.7)",
-    fontSize: 16,
-    marginBottom: 10,
+    color: "rgba(255, 255, 255, 0.8)", // theme.colors.text.secondary
+    fontSize: 16, // theme.typography.body.fontSize
+    marginBottom: 16, // theme.spacing.md
   },
   warningContainer: {
-    backgroundColor: "rgba(255, 167, 38, 0.2)",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 15,
+    backgroundColor: "rgba(255, 167, 38, 0.2)", // Keeping original for specific warning tint
+    paddingVertical: 10, // theme.spacing.sm + 2
+    paddingHorizontal: 28, // theme.spacing.lg + 4
+    borderRadius: 16, // theme.borderRadius.lg
     borderWidth: 1,
-    borderColor: "#ffa726",
-    marginTop: 15,
+    borderColor: "#f59e0b", // theme.colors.warning
+    marginTop: 20, // theme.spacing.md + 4
   },
   warningText: {
-    color: "#ffa726",
-    fontSize: 14,
-    fontWeight: "600",
+    color: "#f59e0b", // theme.colors.warning
+    fontSize: 14, // theme.typography.caption.fontSize
+    fontWeight: "600", // theme.typography.h3.fontWeight
     textAlign: "center",
   },
   expoGoIndicator: {
-    marginTop: 15,
-    backgroundColor: "rgba(74, 222, 128, 0.1)",
-    paddingVertical: 5,
-    paddingHorizontal: 15,
-    borderRadius: 20,
+    marginTop: 20, // theme.spacing.md + 4
+    backgroundColor: "rgba(74, 222, 128, 0.1)", // theme.colors.secondary + "1A"
+    paddingVertical: 5, // theme.spacing.xs + 1
+    paddingHorizontal: 18, // theme.spacing.md + 2
+    borderRadius: 20, // theme.borderRadius.xl
     borderWidth: 1,
-    borderColor: "rgba(74, 222, 128, 0.3)",
+    borderColor: "rgba(74, 222, 128, 0.3)", // theme.colors.secondary + "4D"
   },
   expoGoText: {
-    color: "#4ade80",
-    fontSize: 12,
-    fontWeight: "600",
+    color: "#4ade80", // theme.colors.secondary
+    fontSize: 12, // theme.typography.small.fontSize
+    fontWeight: "600", // theme.typography.h3.fontWeight
   },
 })
 

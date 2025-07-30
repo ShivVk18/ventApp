@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -10,30 +10,27 @@ import {
   Platform,
   TouchableWithoutFeedback,
   StyleSheet,
-  Alert, 
+  Alert,
   ActivityIndicator,
-} from "react-native"
-import { useSafeAreaInsets } from "react-native-safe-area-context"
-import PaymentModal from "../../components/PaymentModal"
-import { useNavigation } from "@react-navigation/native"
-
-
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import LinearGradient from "react-native-linear-gradient";
+import PaymentModal from "../../components/PaymentModal";
+import { useNavigation } from "@react-navigation/native";
 import { auth, firestore } from "../../config/firebase.config";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 
 const Vent = () => {
-
   const navigation = useNavigation();
-
-  const [ventText, setVentText] = useState("")
-  const [modalVisible, setModalVisible] = useState(false)
-  const [isCreatingRoom, setIsCreatingRoom] = useState(false)
-  const insets = useSafeAreaInsets()
+  const [ventText, setVentText] = useState("");
+  const [modalVisible, setModalVisible] = useState(false);
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const handlePaymentSuccess = async (plan) => {
-    console.log(`Payment completed for plan: ${plan}`)
-    await createFirebaseRoom(plan)
-  }
+    console.log(`Payment completed for plan: ${plan}`);
+    await createFirebaseRoom(plan);
+  };
 
   const createFirebaseRoom = async (plan) => {
     if (ventText.trim() === "") {
@@ -41,48 +38,43 @@ const Vent = () => {
       return;
     }
 
-    setIsCreatingRoom(true); // Start loading indicator
+    setIsCreatingRoom(true);
     try {
       const user = auth.currentUser;
       if (!user) {
         Alert.alert("Authentication Error", "You must be logged in to create a vent room.");
-        router.replace('/dashboard-screen'); 
+        navigation.replace("DashboardScreen");
         return;
       }
 
-      // 1. Create a new document in the 'rooms' collection in Firestore
-      const roomsCollectionRef = collection(firestore, 'rooms');
-      const newRoomRef = await addDoc(roomsCollectionRef, {
-        venterId: user.uid, 
-        venterEmail: user.email, 
-        ventText: ventText.trim(), 
-        plan: plan, 
-        status: 'waiting', 
-        createdAt: serverTimestamp(), 
-        listenerId: null, 
+      const newRoomRef = await addDoc(collection(firestore, "rooms"), {
+        venterId: user.uid,
+        venterEmail: user.email,
+        ventText: ventText.trim(),
+        plan: plan,
+        status: "waiting",
+        createdAt: serverTimestamp(),
+        listenerId: null,
         listenerEmail: null,
         startTime: null,
-        allowListeners: true, // Allow people to join as listeners
-        currentListeners: 0,  // Track number of listeners
-        maxListeners: 2 // Set max listeners to 2,
+        allowListeners: true,
+        currentListeners: 0,
+        maxListeners: 2,
       });
 
-      const roomId = newRoomRef.id; 
-
-      console.log("Firebase Room Created:", roomId);
-      setVentText(""); 
-
+      const roomId = newRoomRef.id;
+      setVentText("");
       navigation.navigate("VoiceCall", {
-          ventText: ventText.trim(),
-          plan,
-          channelName: roomId,
-          isHost: true,
-        });
-      } catch (error) {
+        ventText: ventText.trim(),
+        plan,
+        channelName: roomId,
+        isHost: true,
+      });
+    } catch (error) {
       console.error("Error creating Firebase room:", error);
-      Alert.alert("Room Creation Failed", error.message || "An error occurred while creating your vent room. Please try again.");
+      Alert.alert("Room Creation Failed", error.message || "An error occurred.");
     } finally {
-      setIsCreatingRoom(false); // Stop loading indicator
+      setIsCreatingRoom(false);
     }
   };
 
@@ -91,93 +83,92 @@ const Vent = () => {
       Alert.alert("Empty Vent", "Please type what’s on your mind before submitting.");
       return;
     }
-    setModalVisible(true); // Show the payment modal
-  }
+    setModalVisible(true);
+  };
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
-      >
-        <ScrollView
-          contentContainerStyle={[
-            styles.content,
-            {
-              paddingTop: insets.top + 20,
-              paddingBottom: insets.bottom + 20,
-            },
-          ]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+    <LinearGradient colors={['#1a1a40', '#0f0f2e']} style={styles.gradientContainer}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <KeyboardAvoidingView
+          style={styles.container}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
         >
-          <View style={styles.mainContent}>
-            <Text style={styles.title}>Share Your Vent 💭</Text>
+          <ScrollView
+            contentContainerStyle={[
+              styles.content,
+              {
+                paddingTop: insets.top + 20,
+                paddingBottom: insets.bottom + 20,
+              },
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.mainContent}>
+              <Text style={styles.title}>Share Your Vent 💭</Text>
 
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Type what’s on your mind..."
-                placeholderTextColor="rgba(255,255,255,0.5)"
-                multiline
-                value={ventText}
-                onChangeText={setVentText}
-                returnKeyType="done"
-                blurOnSubmit={true}
-                textAlignVertical="top"
-                maxLength={500}
-                editable={!isCreatingRoom} // Disable input while room is being created
-              />
-              <Text style={styles.characterCount}>{ventText.length}/500</Text>
-            </View>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Type what’s on your mind..."
+                  placeholderTextColor="rgba(255,255,255,0.5)"
+                  multiline
+                  value={ventText}
+                  onChangeText={setVentText}
+                  returnKeyType="done"
+                  blurOnSubmit
+                  textAlignVertical="top"
+                  maxLength={500}
+                  editable={!isCreatingRoom}
+                />
+                <Text style={styles.characterCount}>{ventText.length}/500</Text>
+              </View>
 
-            <Text style={styles.helperText}>Your vent is anonymous</Text>
-            <Text style={styles.secureText}>🔐 Secured with Expo Crypto</Text>
+              <Text style={styles.helperText}>Your vent is anonymous</Text>
 
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity
-                onPress={handleSubmitVent}
-                style={[
-                  styles.submitButton,
-                  (!ventText.trim() || isCreatingRoom) && styles.disabledButton, // Disable if text is empty or creating room
-                ]}
-                disabled={!ventText.trim() || isCreatingRoom} // Disable button
-              >
-                {isCreatingRoom ? (
-                  <ActivityIndicator color="#fff" /> // Show loading indicator
-                ) : (
-                  <>
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity
+                  onPress={handleSubmitVent}
+                  style={[
+                    styles.submitButton,
+                    (!ventText.trim() || isCreatingRoom) && styles.disabledButton,
+                  ]}
+                  disabled={!ventText.trim() || isCreatingRoom}
+                >
+                  {isCreatingRoom ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
                     <Text style={styles.submitButtonText}>Submit</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </ScrollView>
+          </ScrollView>
 
-        {/* Payment Modal */}
-        <PaymentModal
-          visible={modalVisible}
-          onClose={() => setModalVisible(false)}
-          onPaymentSuccess={handlePaymentSuccess}
-        />
-      </KeyboardAvoidingView>
-    </TouchableWithoutFeedback>
-  )
-}
+          <PaymentModal
+            visible={modalVisible}
+            onClose={() => setModalVisible(false)}
+            onPaymentSuccess={handlePaymentSuccess}
+          />
+        </KeyboardAvoidingView>
+      </TouchableWithoutFeedback>
+    </LinearGradient>
+  );
+};
 
 export default Vent;
 
-
 const styles = StyleSheet.create({
+  gradientContainer: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: "#111827",
+    paddingHorizontal: 30,
   },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 30,
   },
   mainContent: {
     flex: 1,
@@ -185,7 +176,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   title: {
-    color: "white",
+    color: "#fff",
     fontSize: 36,
     fontWeight: "bold",
     textAlign: "center",
@@ -195,7 +186,6 @@ const styles = StyleSheet.create({
   inputContainer: {
     width: "100%",
     marginBottom: 30,
-    position: "relative",
   },
   textInput: {
     borderWidth: 2,
@@ -221,26 +211,18 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 10,
   },
-  secureText: {
-    color: "#4ade80",
-    fontSize: 14,
-    textAlign: "center",
-    fontWeight: "600",
-  },
   buttonContainer: {
     marginTop: 20,
     width: "100%",
   },
   submitButton: {
-    backgroundColor: "#4f46e5",
+    backgroundColor: "#FFC940",
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "center",
   },
   submitButtonText: {
-    color: "#fff",
+    color: "#000",
     fontWeight: "600",
     fontSize: 16,
   },

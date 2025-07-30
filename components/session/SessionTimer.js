@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet } from "react-native"
-import Timer from "../ui/Timer"
+import Timer from "../ui/Timer" // Assuming Timer is in this relative path
 
 const SessionTimer = ({ sessionTime, timeRemaining, plan }) => {
   return (
@@ -17,19 +17,19 @@ const SessionTimer = ({ sessionTime, timeRemaining, plan }) => {
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
-    marginVertical: 30,
+    marginVertical: 32, // theme.spacing.xl
   },
   planText: {
-    color: "rgba(255, 255, 255, 0.7)",
-    fontSize: 16,
+    color: "rgba(255, 255, 255, 0.8)", // theme.colors.text.secondary
+    fontSize: 16, // theme.typography.body.fontSize
     textTransform: "capitalize",
-    marginBottom: 20,
+    marginBottom: 24, // theme.spacing.lg
   },
   timeRemainingContainer: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 15,
+    backgroundColor: "rgba(255, 255, 255, 0.1)", // theme.colors.overlay
+    paddingVertical: 10, // theme.spacing.sm + 2
+    paddingHorizontal: 28, // theme.spacing.lg + 4
+    borderRadius: 16, // theme.borderRadius.lg
   },
 })
 

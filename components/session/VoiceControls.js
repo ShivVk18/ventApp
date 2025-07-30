@@ -1,8 +1,6 @@
 import { View, TouchableOpacity, Text, StyleSheet } from "react-native"
 
 const VoiceControls = ({ muted, onToggleMute, onEndCall, disabled = false }) => {
-
-  
   return (
     <View style={styles.container}>
       <TouchableOpacity
@@ -27,35 +25,35 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-around",
     width: "70%",
-    marginBottom: 30,
+    marginBottom: 32, // theme.spacing.xl
   },
   controlButton: {
     width: 80,
     height: 80,
-    borderRadius: 40,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    borderRadius: 9999, // theme.borderRadius.full
+    backgroundColor: "rgba(255, 255, 255, 0.2)", // theme.colors.overlayStrong
     justifyContent: "center",
     alignItems: "center",
-    elevation: 3,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2, // theme.shadows.small
   },
   mutedButton: {
-    backgroundColor: "rgba(255, 107, 107, 0.8)",
+    backgroundColor: "rgba(255, 107, 107, 0.8)", // Keeping original for specific muted tint
   },
   endCallButton: {
-    backgroundColor: "#ff6b6b",
+    backgroundColor: "#ef4444", // theme.colors.error
   },
   controlButtonText: {
-    fontSize: 28,
-    marginBottom: 4,
+    fontSize: 32, // theme.typography.h1.fontSize
+    marginBottom: 4, // theme.spacing.xs
   },
   controlLabel: {
-    color: "white",
-    fontSize: 10,
-    fontWeight: "600",
+    color: "#ffffff", // theme.colors.text.primary
+    fontSize: 12, // theme.typography.small.fontSize
+    fontWeight: "600", // theme.typography.h3.fontWeight
     textAlign: "center",
   },
 })

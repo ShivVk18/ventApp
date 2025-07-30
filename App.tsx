@@ -15,8 +15,8 @@ const Stack = createNativeStackNavigator();
 
 const StacknNavigator =  () => {
   return (
-    <Stack.Navigator initialRouteName="WelcomeScreen">
-      <Stack.Screen name="WelcomeScreen" component={WelcomeScreen} />
+    <Stack.Navigator initialRouteName="WelcomeScreen" screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="WelcomeScreen" component={WelcomeScreen}  />
       <Stack.Screen name="Dashboard" component={Dashboardscreen} />
       <Stack.Screen name="Listener" component={Listener} />
       <Stack.Screen name="SessionEnd" component={SessionEnd} />

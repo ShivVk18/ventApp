@@ -96,7 +96,7 @@ export default function VentSubmitted() {
                 </View>
 
                 <Text style={styles.helperText}>Share your thoughts anonymously</Text>
-                <Text style={styles.secureText}>🔐 Secured with Expo Crypto</Text>
+                
               </View>
 
               <View style={styles.buttonContainer}>
