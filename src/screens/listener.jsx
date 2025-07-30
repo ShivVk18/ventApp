@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, RefreshControl } from "react-native";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, RefreshControl, Platform } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import { request, PERMISSIONS } from 'react-native-permissions';
 import GradientContainer from "../../components/ui/GradientContainer";
 import StatusBar from "../../components/ui/StatusBar";
 import Button from "../../components/ui/Button";
@@ -17,11 +18,13 @@ export default function RoomBrowserScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    // Listen to active rooms in real-time
+    console.log("RoomBrowser: Starting to listen for available rooms...");
+    
+    
     const roomsQuery = query(
       collection(firestore, "rooms"),
-      where("status", "==", "waiting"),
-      where("allowListeners", "==", true), // Only rooms that allow listeners
+      where("status", "in", ["waiting", "active"]), 
+      where("allowListeners", "==", true), 
       orderBy("createdAt", "desc"),
       limit(20)
     );
@@ -37,11 +40,16 @@ export default function RoomBrowserScreen() {
         });
       });
       
+      console.log("RoomBrowser: Found available rooms:", rooms.length);
+      rooms.forEach(room => {
+        console.log(`RoomBrowser: Room ${room.id} - Status: ${room.status}, Listeners: ${room.currentListeners || 0}`);
+      });
+      
       setAvailableRooms(rooms);
       setLoading(false);
       setRefreshing(false);
     }, (error) => {
-      console.error("Error fetching rooms:", error);
+      console.error("RoomBrowser: Error fetching rooms:", error);
       setLoading(false);
       setRefreshing(false);
     });
@@ -49,22 +57,93 @@ export default function RoomBrowserScreen() {
     return () => unsubscribe();
   }, []);
 
-  const handleJoinAsListener = (room) => {
+  // Request microphone permissions before joining
+  const requestMicrophonePermission = async () => {
+    try {
+      console.log("RoomBrowser: Requesting microphone permission...");
+      
+      const micPermission = Platform.OS === 'ios' 
+        ? PERMISSIONS.IOS.MICROPHONE 
+        : PERMISSIONS.ANDROID.RECORD_AUDIO;
+
+      const result = await request(micPermission);
+      console.log("RoomBrowser: Permission result:", result);
+      
+      if (result === 'granted') {
+        console.log("RoomBrowser: ✅ Microphone permission granted");
+        return true;
+      } else {
+        console.log("RoomBrowser: ❌ Microphone permission denied:", result);
+        Alert.alert(
+          "Permission Required",
+          "Microphone access is required to join voice sessions. Please enable it in settings to participate.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Settings", onPress: () => {
+              // You might want to open device settings here
+              console.log("RoomBrowser: User chose to go to settings");
+            }}
+          ]
+        );
+        return false;
+      }
+    } catch (error) {
+      console.error("RoomBrowser: Permission request error:", error);
+      Alert.alert("Permission Error", "Failed to request microphone permission.");
+      return false;
+    }
+  };
+
+  const handleJoinAsListener = async (room) => {
+    console.log("RoomBrowser: User wants to join room as listener:", {
+      roomId: room.id,
+      status: room.status,
+      currentListeners: room.currentListeners,
+      maxListeners: room.maxListeners
+    });
+
+    // Check if room is still available
+    if (room.status === "ended") {
+      Alert.alert("Session Ended", "This vent session has already ended.");
+      return;
+    }
+
+    // Check listener limit
+    if (room.currentListeners >= (room.maxListeners || 2)) {
+      Alert.alert("Session Full", "This vent session is already at maximum capacity.");
+      return;
+    }
+
+    // Request microphone permission first
+    const hasPermission = await requestMicrophonePermission();
+    if (!hasPermission) {
+      console.log("RoomBrowser: Cannot join - no microphone permission");
+      return;
+    }
+
     Alert.alert(
       "Join as Listener",
-      `Join "${room.ventText?.slice(0, 50)}..." as a listener?\n\nYou'll be able to hear as well as speak.`,
+      `Join "${room.ventText?.slice(0, 50)}..." as a listener?\n\nYou'll be able to hear the venter and speak to provide support.`,
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Join",
+          text: "Join Session",
           onPress: () => {
+            console.log("RoomBrowser: ✅ Navigating to voice call as listener:", {
+              channelName: room.id,
+              isHost: false,
+              isListener: true,
+              ventText: room.ventText,
+              plan: room.plan
+            });
+                     
             navigation.navigate("VoiceCall", {
               channelName: room.id,
               isHost: false,
-              isListener: true, // New flag to indicate listener mode
+              isListener: true,
               ventText: room.ventText,
               plan: room.plan,
-              roomCreator: room.createdBy
+              
             });
           }
         }
@@ -73,6 +152,7 @@ export default function RoomBrowserScreen() {
   };
 
   const handleRefresh = () => {
+    console.log("RoomBrowser: User refreshing room list...");
     setRefreshing(true);
   };
 
@@ -92,35 +172,54 @@ export default function RoomBrowserScreen() {
     return `${diffDays}d ago`;
   };
 
-  const renderRoomItem = ({ item: room }) => (
-    <TouchableOpacity 
-      style={styles.roomCard}
-      onPress={() => handleJoinAsListener(room)}
-    >
-      <View style={styles.roomHeader}>
-        <View style={styles.roomInfo}>
-          <Text style={styles.roomPlan}>{room.plan}</Text>
-          <Text style={styles.roomTime}>{formatTimeAgo(room.createdAt)}</Text>
-        </View>
-        <View style={styles.listenerCount}>
-          <Text style={styles.listenerText}>👥 {room.currentListeners || 0}</Text>
-        </View>
-      </View>
-      
-      <Text style={styles.ventText} numberOfLines={3}>
-        {room.ventText || "Anonymous vent session"}
-      </Text>
-      
-      <View style={styles.roomFooter}>
-        <View style={styles.statusContainer}>
-          <View style={styles.liveIndicator} />
-          <Text style={styles.liveText}>LIVE</Text>
+  const getStatusIndicator = (room) => {
+    switch (room.status) {
+      case "waiting":
+        return { color: "#fbbf24", text: "WAITING", emoji: "⏳" };
+      case "active":
+        return { color: "#ef4444", text: "LIVE", emoji: "🔴" };
+      default:
+        return { color: "#6b7280", text: "UNKNOWN", emoji: "❓" };
+    }
+  };
+
+  const renderRoomItem = ({ item: room }) => {
+    const statusInfo = getStatusIndicator(room);
+    
+    return (
+      <TouchableOpacity 
+        style={styles.roomCard}
+        onPress={() => handleJoinAsListener(room)}
+      >
+        <View style={styles.roomHeader}>
+          <View style={styles.roomInfo}>
+            <Text style={styles.roomPlan}>{room.plan}</Text>
+            <Text style={styles.roomTime}>{formatTimeAgo(room.createdAt)}</Text>
+          </View>
+          <View style={styles.listenerCount}>
+            <Text style={styles.listenerText}>👥 {room.currentListeners || 0}/{room.maxListeners || 2}</Text>
+          </View>
         </View>
         
-        <Text style={styles.joinText}>Tap to listen</Text>
-      </View>
-    </TouchableOpacity>
-  );
+        <Text style={styles.ventText} numberOfLines={3}>
+          {room.ventText || "Anonymous vent session"}
+        </Text>
+        
+        <View style={styles.roomFooter}>
+          <View style={styles.statusContainer}>
+            <View style={[styles.statusIndicator, { backgroundColor: statusInfo.color }]} />
+            <Text style={[styles.statusText, { color: statusInfo.color }]}>
+              {statusInfo.emoji} {statusInfo.text}
+            </Text>
+          </View>
+          
+          <Text style={styles.joinText}>
+            {room.status === "waiting" ? "Tap to join" : "Tap to listen"}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   if (loading) {
     return (
@@ -276,15 +375,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  liveIndicator: {
+  statusIndicator: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#ef4444",
     marginRight: 6,
   },
-  liveText: {
-    color: "#ef4444",
+  statusText: {
     fontSize: 12,
     fontWeight: "bold",
   },

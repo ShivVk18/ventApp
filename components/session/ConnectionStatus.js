@@ -14,7 +14,7 @@ const ConnectionStatus = ({ joined, remoteUsers, timeRemaining, status, statusCo
         {getStatusEmoji()} {status}
       </Text>
       <Text style={styles.participantsText}>
-        {remoteUsers > 0 ? `${remoteUsers + 1} participants` : "Waiting for listener..."}
+        {remoteUsers.length > 0 ? `${remoteUsers + 1} participants` : "Waiting for listener..."}
       </Text>
 
       {timeRemaining <= 300 && timeRemaining > 0 && (

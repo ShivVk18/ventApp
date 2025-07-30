@@ -12,23 +12,24 @@ import { AuthProvider } from './context/AuthContext';
 
 const Stack = createNativeStackNavigator();
 
-
-const StacknNavigator =  () => {
+const StacknNavigator = () => {
   return (
-    <Stack.Navigator initialRouteName="WelcomeScreen" screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="WelcomeScreen" component={WelcomeScreen}  />
+    <Stack.Navigator
+      initialRouteName="WelcomeScreen"
+      screenOptions={{ headerShown: false }}
+    >
+      <Stack.Screen name="WelcomeScreen" component={WelcomeScreen} />
       <Stack.Screen name="Dashboard" component={Dashboardscreen} />
-      <Stack.Screen name="Listener" component={Listener} />
-      <Stack.Screen name="SessionEnd" component={SessionEnd} />
       <Stack.Screen name="Vent" component={Vent} />
+      <Stack.Screen name="Listener" component={Listener} />
       <Stack.Screen name="VentSubmitted" component={VentSubmitted} />
       <Stack.Screen name="VoiceCall" component={VoiceCall} />
+      <Stack.Screen name="SessionEnd" component={SessionEnd} />
     </Stack.Navigator>
   );
-}
+};
 
-const App = () =>  {
-  
+const App = () => {
   return (
     <AuthProvider>
       <NavigationContainer>
@@ -36,6 +37,6 @@ const App = () =>  {
       </NavigationContainer>
     </AuthProvider>
   );
-}
+};
 
 export default App;
