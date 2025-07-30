@@ -45,7 +45,7 @@ export default function DashboardScreen() {
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.roleBtn} onPress={handleListenPress}>
-        <Text style={styles.roleBtnText}>I want to Listen</Text>
+        <Text style={styles.roleBtnText}>🎧 Join as Listener</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>

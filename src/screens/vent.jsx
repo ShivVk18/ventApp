@@ -62,6 +62,9 @@ const Vent = () => {
         listenerId: null, 
         listenerEmail: null,
         startTime: null,
+        allowListeners: true, // Allow people to join as listeners
+        currentListeners: 0,  // Track number of listeners
+        maxListeners: 2 // Set max listeners to 2,
       });
 
       const roomId = newRoomRef.id; 
