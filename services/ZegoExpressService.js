@@ -177,7 +177,7 @@ class ZegoExpressService {
       config.onNetworkQuality?.(userID, upstreamQuality, downstreamQuality)
     })
 
-    // Store event listeners for cleanup
+    
     this.eventListeners.set("roomStateUpdate", config.onRoomStateUpdate)
     this.eventListeners.set("roomUserUpdate", config.onUserUpdate)
     this.eventListeners.set("roomStreamUpdate", config.onStreamUpdate)
@@ -200,42 +200,42 @@ class ZegoExpressService {
   }
 
   async logoutRoom() {
-    if (!this.isInitialized || !this.engine || !this.roomID) {
-      console.log("⚠️ Not logged in, nothing to logout")
-      return true
-    }
-
-    try {
-      console.log("🚪 Logging out of room:", this.roomID)
-
-      // Stop publishing
-      if (this.streamID) {
-        await this.engine.stopPublishingStream(this.streamID)
-      }
-
-      // Stop playing all remote streams
-      for (const streamID of this.remoteStreams.keys()) {
-        await this.engine.stopPlayingStream(streamID)
-      }
-      this.remoteStreams.clear()
-
-      // Logout from room
-      await this.engine.logoutRoom(this.roomID)
-
-      // Remove event handlers
-      this.removeEventHandlers()
-
-      // Reset room info
-      this.roomID = null
-      this.streamID = null
-
-      console.log("✅ Logged out of room successfully")
-      return true
-    } catch (error) {
-      console.error("❌ Failed to logout room:", error)
-      return false
-    }
+  if (!this.isInitialized || !this.engine || !this.roomID) {
+    console.log("⚠️ Not logged in, nothing to logout")
+    return true
   }
+
+  try {
+    console.log("🚪 Logging out of room:", this.roomID)
+
+    // Stop publishing
+    if (this.streamID) {
+      await this.engine.stopPublishingStream()
+    }
+
+    // Stop all remote streams
+    for (const streamID of this.remoteStreams.keys()) {
+      await this.engine.stopPlayingStream(streamID)
+    }
+    this.remoteStreams.clear()
+
+    // Logout from room
+    await this.engine.logoutRoom(this.roomID)
+
+    // Remove event handlers
+    this.removeEventHandlers()
+
+    // Reset room info
+    this.roomID = null
+    this.streamID = null
+
+    console.log("✅ Logged out of room successfully")
+    return true
+  } catch (error) {
+    console.error("❌ Failed to logout room:", error)
+    return false
+  }
+}
 
   async toggleMicrophone(muted) {
     if (!this.isInitialized || !this.engine) return false
@@ -268,7 +268,16 @@ class ZegoExpressService {
 
     try {
       // The correct API for Zego Express is enableSoundLevelMonitor
-      await this.engine.enableSoundLevelMonitor(enable, interval)
+      await this.engine.startSoundLevelMonitor({
+      enableVUMeter: enable, // Use enableVUMeter for enabling/disabling the sound level monitor
+      // Zego documentation states 'enable_vumeter', but it's common for JS/TS bindings to use camelCase.
+      // If 'enableVUMeter' doesn't work, try 'enable_vumeter'.
+      // However, the error message indicates the *type* of argument, not the property name within the object.
+      // The primary issue is passing a boolean instead of an object.
+      interval: interval,
+      // You might also have other properties like `enableSpeaker` or `enableMic`,
+      // but for basic sound level monitoring, `enableVUMeter` and `interval` are key.
+    })
       console.log(`🔊 Audio volume evaluation ${enable ? "enabled" : "disabled"}`)
       return true
     } catch (error) {
