@@ -1,329 +1,304 @@
-import { useEffect, useState, useRef } from "react";
-import { Text, StyleSheet, Alert, View } from "react-native";
-import { useNavigation, useRoute } from "@react-navigation/native";
-import GradientContainer from "../components/ui/GradientContainer";
-import StatusBar from "../components/ui/StatusBar";
-import SessionTimer from "../components/session/SessionTimer";
-import ConnectionStatus from "../components/session/ConnectionStatus";
-import VoiceControls from "../components/voice/VoiceControls";
-import useTimer from "../hooks/useTimer";
-import VoiceCallService from "../services/VoiceCallService";
-import RoomService from "../services/RoomService";
-import { auth } from "../config/firebase.config";
+import { useEffect, useState, useRef } from "react"
+import { View, Text, StyleSheet, Alert, BackHandler } from "react-native"
+import { useNavigation, useRoute } from "@react-navigation/native"
+import GradientContainer from "../../components/ui/GradientContainer"
+import StatusBar from "../../components/ui/StatusBar"
+import SessionTimer from "../../components/session/SessionTimer"
+import VoiceControls from "../../components/voice/VoiceControl"
+import useTimer from "../../hooks/useTimer"
+import ZegoExpressService from "../../services/ZegoExpressService"
+import RoomService from "../../services/RoomService"
+import { auth } from "../../config/firebase.config"
 
-const AGORA_APP_ID = "f16b94ea49fd47b5b65e86d20ef1badd";
-
-/**
- * @typedef {object} RouteParams
- * @property {string} ventText
- * @property {string} plan
- * @property {string} channelName
- * @property {boolean} isHost
- * @property {boolean} isListener
- */
+// Replace with your ZegoCloud credentials
+const ZEGO_APP_ID = 348919014 // Your App ID
+const ZEGO_APP_SIGN = "3e1bd2e901019273151648fbb35d45e912425fcf93e07e38a571dca4c58688d1" 
 
 export default function VoiceCallScreen() {
-  const navigation = useNavigation();
-  const route = useRoute();
-  /** @type {RouteParams} */
-  const { ventText, plan, channelName, isHost, isListener } = route.params;
+  const navigation = useNavigation()
+  const route = useRoute()
+
+  const { ventText, plan, roomId, isHost } = route.params
 
   // State management
-  const [isJoined, setIsJoined] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isSpeakerEnabled, setIsSpeakerEnabled] = useState(true);
-  const [remoteUserIds, setRemoteUserIds] = useState([]);
-  const [connectionStatus, setConnectionStatus] = useState("requesting_permissions");
-  const [localUid, setLocalUid] = useState(0);
-  const [permissionsGranted, setPermissionsGranted] = useState(false);
+  const [isJoined, setIsJoined] = useState(false)
+  const [isMuted, setIsMuted] = useState(false)
+  const [isSpeakerMuted, setIsSpeakerMuted] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState("connecting")
+  const [remoteUsers, setRemoteUsers] = useState([])
+  const [soundLevels, setSoundLevels] = useState({})
+  const [networkQuality, setNetworkQuality] = useState({})
 
-  const roomUnsubscribeRef = useRef(null);
+  const roomUnsubscribeRef = useRef(null)
+  const callEndedRef = useRef(false)
 
-  // Timer configuration
-  const initialCallDuration = RoomService.getDurationInSeconds(plan);
+  const initialCallDuration = RoomService.getDurationInSeconds(plan)
 
   const handleTimeUp = () => {
     Alert.alert("Session Ended", "Your session has ended automatically.", [
       {
         text: "OK",
         onPress: async () => {
-          await handleEndCall(true);
+          await handleEndCall(true)
         },
       },
-    ]);
-  };
+    ])
+  }
 
-  const { sessionTime, timeRemaining, stopTimer } = useTimer(
-    initialCallDuration,
-    handleTimeUp
-  );
+  const { sessionTime, timeRemaining, stopTimer } = useTimer(initialCallDuration, handleTimeUp)
 
-  // Initialize voice call service
-  useEffect(() => {
-    const initializeVoiceCall = async () => {
-      try {
-        console.log("🎬 Initializing voice call...", {
-          channelName,
-          isHost,
-          isListener,
-          plan,
-        });
+  const handleBackPress = () => {
+    Alert.alert("End Session", "Are you sure you want to end this session?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "End", onPress: () => handleEndCall(false) },
+    ])
+    return true
+  }
 
-        // Request permissions
-        setConnectionStatus("requesting_permissions");
-        const hasPermissions = await VoiceCallService.requestPermissions();
+  const initializeVoiceCall = async () => {
+    try {
+      console.log("🎬 Initializing voice call...", { roomId, isHost })
 
-        if (!hasPermissions) {
-          Alert.alert(
-            "Permission Required",
-            "Microphone access is required for voice calls.",
-            [{ text: "OK", onPress: () => navigation.goBack() }]
-          );
-          return;
-        }
+      setConnectionStatus("requesting_permissions")
 
-        setPermissionsGranted(true);
-        setConnectionStatus("connecting");
-
-        // Initialize voice service
-        const initialized = await VoiceCallService.initialize({
-          appId: AGORA_APP_ID,
-          channelName,
-          token: null,
-          isHost,
-          onJoinSuccess: handleJoinSuccess,
-          onUserJoined: handleUserJoined,
-          onUserLeft: handleUserLeft,
-          onConnectionStateChanged: handleConnectionStateChanged,
-          onError: handleVoiceError,
-        });
-
-        if (!initialized) {
-          throw new Error("Failed to initialize voice service");
-        }
-
-        // Join channel
-        const joined = await VoiceCallService.joinChannel();
-        if (!joined) {
-          throw new Error("Failed to join voice channel");
-        }
-      } catch (error) {
-        console.error("❌ Voice call initialization failed:", error);
-        setConnectionStatus("failed");
-        Alert.alert("Connection Failed", "Unable to initialize voice call.");
+      // Request permissions
+      const hasPermissions = await ZegoExpressService.requestPermissions()
+      if (!hasPermissions) {
+        Alert.alert("Permission Required", "Microphone access is required for voice calls.", [
+          { text: "OK", onPress: () => navigation.goBack() },
+        ])
+        return
       }
-    };
 
-    initializeVoiceCall();
+      setConnectionStatus("initializing")
 
-    // Cleanup on unmount
-    return () => {
-      console.log("🧹 Cleaning up voice call...");
-      stopTimer();
-      VoiceCallService.destroy();
-      if (roomUnsubscribeRef.current) {
-        roomUnsubscribeRef.current();
+      // Create engine
+      const engineCreated = await ZegoExpressService.createEngine(ZEGO_APP_ID, ZEGO_APP_SIGN)
+      if (!engineCreated) {
+        throw new Error("Failed to create ZegoExpressEngine")
       }
-    };
-  }, [channelName, isHost, isListener, navigation, plan]);
 
-  // Room status listener
-  useEffect(() => {
-    if (channelName) {
-      roomUnsubscribeRef.current = RoomService.listenToRoom(channelName, (room) => {
-        if (room) {
-          console.log("📡 Room status update:", room.status);
+      setConnectionStatus("connecting")
 
-          // Handle room ending
-          if (room.status === "ended" && isJoined) {
-            Alert.alert("Session Ended", "The session has been ended by the host.", [
-              { text: "OK", onPress: () => navigation.goBack() },
-            ]);
-          }
-        }
-      });
+      // Login to room
+      const user = auth.currentUser
+      const userID = user?.uid || `user_${Math.floor(Math.random() * 10000)}`
+      const userName = user?.email || `User_${userID.slice(0, 6)}`
+
+      const joined = await ZegoExpressService.loginRoom(roomId, userID, userName, {
+        onRoomStateUpdate: handleRoomStateUpdate,
+        onUserUpdate: handleUserUpdate,
+        onStreamUpdate: handleStreamUpdate,
+        onSoundLevelUpdate: handleSoundLevelUpdate,
+        onNetworkQuality: handleNetworkQuality,
+      })
+
+      if (!joined) {
+        throw new Error("Failed to join voice room")
+      }
+
+      // Enable audio volume evaluation
+      await ZegoExpressService.enableAudioVolumeEvaluation(true)
+    } catch (error) {
+      console.error("❌ Voice call initialization failed:", error)
+      setConnectionStatus("failed")
+      Alert.alert("Connection Failed", `Unable to initialize voice call: ${error.message}`, [
+        { text: "Retry", onPress: () => initializeVoiceCall() },
+        { text: "Cancel", onPress: () => navigation.goBack() },
+      ])
     }
+  }
 
-    return () => {
-      if (roomUnsubscribeRef.current) {
-        roomUnsubscribeRef.current();
-      }
-    };
-  }, [channelName, isJoined, navigation]);
+  const handleRoomStateUpdate = (state, errorCode) => {
+    console.log("🏠 Room state update:", { state, errorCode })
 
-  // Voice call event handlers
-  const handleJoinSuccess = async (uid) => {
-    console.log("🎉 Successfully joined voice channel:", uid);
-    setIsJoined(true);
-    setLocalUid(uid);
-    setConnectionStatus("connected");
-
-    // Update room status
-    const user = auth.currentUser;
-    if (user) {
-      await RoomService.updateParticipantConnection(channelName, user.uid, true, uid);
-
-      if (isHost) {
-        await RoomService.updateRoomStatus(channelName, "active");
-      }
+    if (errorCode !== 0) {
+      console.error("❌ Room error:", errorCode)
+      setConnectionStatus("failed")
+      return
     }
-  };
-
-  const handleUserJoined = (uid) => {
-    console.log("👤 Remote user joined:", uid);
-    setRemoteUserIds((prev) => {
-      if (!prev.includes(uid)) {
-        return [...prev, uid];
-      }
-      return prev;
-    });
-  };
-
-  const handleUserLeft = (uid) => {
-    console.log("👋 Remote user left:", uid);
-    setRemoteUserIds((prev) => prev.filter((id) => id !== uid));
-  };
-
-  const handleConnectionStateChanged = (state) => {
-    console.log("🔗 Connection state:", state);
 
     switch (state) {
-      case "CONNECTING":
-        setConnectionStatus("connecting");
-        break;
       case "CONNECTED":
-        setConnectionStatus("connected");
-        break;
-      case "RECONNECTING":
-        setConnectionStatus("reconnecting");
-        break;
-      case "FAILED":
-        setConnectionStatus("failed");
-        break;
+        setConnectionStatus("connected")
+        setIsJoined(true)
+        break
+      case "CONNECTING":
+        setConnectionStatus("connecting")
+        break
       case "DISCONNECTED":
-        setConnectionStatus("connecting");
-        break;
-      default:
-        console.warn(`Unhandled connection state: ${state}`);
-        break;
+        setConnectionStatus("disconnected")
+        break
     }
-  };
+  }
 
-  const handleVoiceError = (error) => {
-    console.error("❌ Voice call error:", error);
+  const handleUserUpdate = (updateType, userList) => {
+    console.log("👥 User update:", { updateType, userCount: userList.length })
 
-    if (error.code === 101) {
-      Alert.alert("Configuration Error", "Invalid App ID or configuration.");
-    } else if (error.code === 109) {
-      Alert.alert("Session Expired", "Please restart the session.");
-    } else if (error.code === 110) {
-      Alert.alert("Token Invalid", "The authentication token is invalid. Please restart the app.");
+    if (updateType === 0) {
+      // User added
+      setRemoteUsers((prev) => [...prev, ...userList])
     } else {
-      console.log("⚠️ Non-critical voice error:", error);
+      // User removed
+      const removedUserIDs = userList.map((user) => user.userID)
+      setRemoteUsers((prev) => prev.filter((user) => !removedUserIDs.includes(user.userID)))
     }
-  };
+  }
 
-  // Control handlers
+  const handleStreamUpdate = (updateType, streamList) => {
+    console.log("🌊 Stream update:", { updateType, streamCount: streamList.length })
+    // ZegoExpressService handles stream playback internally
+  }
+
+  const handleSoundLevelUpdate = (soundLevels) => {
+    setSoundLevels(soundLevels)
+  }
+
+  const handleNetworkQuality = (userID, upstreamQuality, downstreamQuality) => {
+    setNetworkQuality((prev) => ({
+      ...prev,
+      [userID]: { upstreamQuality, downstreamQuality },
+    }))
+  }
+
   const handleToggleMute = async () => {
-    const success = await VoiceCallService.toggleMute(!isMuted);
+    if (!isJoined) return
+
+    const success = await ZegoExpressService.toggleMicrophone(!isMuted)
     if (success) {
-      setIsMuted(!isMuted);
+      setIsMuted(!isMuted)
     } else {
-      Alert.alert("Error", "Failed to toggle microphone");
+      Alert.alert("Error", "Failed to toggle microphone")
     }
-  };
+  }
 
   const handleToggleSpeaker = async () => {
-    const success = await VoiceCallService.toggleSpeaker(!isSpeakerEnabled);
+    if (!isJoined) return
+
+    const success = await ZegoExpressService.toggleSpeaker(!isSpeakerMuted)
     if (success) {
-      setIsSpeakerEnabled(!isSpeakerEnabled);
+      setIsSpeakerMuted(!isSpeakerMuted)
     } else {
-      Alert.alert("Error", "Failed to toggle speaker");
+      Alert.alert("Error", "Failed to toggle speaker")
     }
-  };
+  }
 
   const handleEndCall = async (autoEnded = false) => {
+    if (callEndedRef.current) return
+    callEndedRef.current = true
+
     if (!autoEnded) {
       Alert.alert("End Session", "Are you sure you want to end this session?", [
-        { text: "Cancel", style: "cancel" },
+        { text: "Cancel", style: "cancel", onPress: () => (callEndedRef.current = false) },
         {
           text: "End",
           onPress: async () => {
-            await performEndCall(false);
+            await performEndCall(false)
           },
         },
-      ]);
+      ])
     } else {
-      await performEndCall(true);
+      await performEndCall(true)
     }
-  };
+  }
 
   const performEndCall = async (autoEnded) => {
-    console.log("👋 Ending call...", { autoEnded });
+    console.log("👋 Ending call...", { autoEnded })
 
     try {
-      stopTimer();
+      stopTimer()
 
-      await VoiceCallService.destroy();
+      // Leave voice room
+      await ZegoExpressService.destroy()
 
-      await RoomService.leaveRoom(channelName, isListener);
+      // Update Firebase room
+      if (isHost) {
+        await RoomService.endRoom(roomId)
+      }
 
-      navigation.navigate("SessionEnd", {
+      // Navigate to session end screen
+      navigation.replace("SessionEnd", {
         sessionTime,
         plan,
         autoEnded,
-      });
+      })
     } catch (error) {
-      console.error("❌ Error ending call:", error);
-      navigation.goBack();
+      console.error("❌ Error ending call:", error)
+      navigation.goBack()
     }
-  };
+  }
 
-  const handleRetryConnection = async () => {
-    console.log("🔄 Retrying connection...");
-    setConnectionStatus("connecting");
+  useEffect(() => {
+    initializeVoiceCall()
 
-    try {
-      const joined = await VoiceCallService.joinChannel();
-      if (!joined) {
-        setConnectionStatus("failed");
+    // Handle Android back button
+    const backHandler = BackHandler.addEventListener("hardwareBackPress", handleBackPress)
+
+    return () => {
+      console.log("🧹 Cleaning up voice call...")
+      stopTimer()
+      ZegoExpressService.destroy()
+      backHandler.remove()
+      if (roomUnsubscribeRef.current) {
+        roomUnsubscribeRef.current()
       }
-    } catch (error) {
-      console.error("❌ Retry failed:", error);
-      setConnectionStatus("failed");
     }
-  };
+  }, [])
+
+  // Room status listener
+  useEffect(() => {
+    if (roomId && isJoined) {
+      roomUnsubscribeRef.current = RoomService.listenToRoom(roomId, (room) => {
+        if (room && room.status === "ended" && !callEndedRef.current) {
+          Alert.alert("Session Ended", "The session has been ended.", [
+            { text: "OK", onPress: () => navigation.goBack() },
+          ])
+        }
+      })
+    }
+
+    return () => {
+      if (roomUnsubscribeRef.current) {
+        roomUnsubscribeRef.current()
+      }
+    }
+  }, [roomId, isJoined, navigation])
+
+  // Get remote streams count
+  const remoteStreamsCount = ZegoExpressService.getRemoteStreamsCount()
 
   return (
     <GradientContainer>
       <StatusBar />
-
       <View style={styles.container}>
         <SessionTimer sessionTime={sessionTime} timeRemaining={timeRemaining} plan={plan} />
 
-        <Text style={styles.ventTextDisplay}>{ventText}</Text>
+        <View style={styles.ventContainer}>
+          <Text style={styles.ventLabel}>{isHost ? "Your Vent:" : "Listening to:"}</Text>
+          <Text style={styles.ventTextDisplay}>{ventText}</Text>
+        </View>
 
-        <ConnectionStatus
-          joined={isJoined}
-          remoteUsers={remoteUserIds}
-          timeRemaining={timeRemaining}
-          connectionStatus={connectionStatus}
-          onRetry={handleRetryConnection}
-          isHost={isHost}
-        />
+        <View style={styles.participantsContainer}>
+          <Text style={styles.participantsText}>
+            👥 {remoteStreamsCount + 1} participant{remoteStreamsCount !== 0 ? "s" : ""} connected
+          </Text>
+          {isHost && remoteStreamsCount === 0 && (
+            <Text style={styles.waitingText}>Waiting for a listener to join...</Text>
+          )}
+        </View>
 
         <VoiceControls
           muted={isMuted}
-          speakerEnabled={isSpeakerEnabled}
+          speakerMuted={isSpeakerMuted}
           onToggleMute={handleToggleMute}
           onToggleSpeaker={handleToggleSpeaker}
           onEndCall={() => handleEndCall(false)}
-          disabled={!isJoined || connectionStatus === "requesting_permissions"}
+          disabled={!isJoined}
           connectionStatus={connectionStatus}
         />
       </View>
     </GradientContainer>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -333,14 +308,37 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
   },
+  ventContainer: {
+    alignItems: "center",
+    marginBottom: 30,
+    paddingHorizontal: 20,
+  },
+  ventLabel: {
+    color: "rgba(255, 255, 255, 0.6)",
+    fontSize: 14,
+    marginBottom: 8,
+    textAlign: "center",
+  },
   ventTextDisplay: {
-    color: "rgba(255, 255, 255, 0.8)",
+    color: "rgba(255, 255, 255, 0.9)",
     fontSize: 16,
     textAlign: "center",
-    marginBottom: 32,
     fontStyle: "italic",
-    paddingHorizontal: 24,
     lineHeight: 22,
     maxHeight: 100,
   },
-});
+  participantsContainer: {
+    alignItems: "center",
+    marginBottom: 40,
+  },
+  participantsText: {
+    color: "rgba(255, 255, 255, 0.8)",
+    fontSize: 14,
+    marginBottom: 5,
+  },
+  waitingText: {
+    color: "rgba(255, 255, 255, 0.6)",
+    fontSize: 12,
+    fontStyle: "italic",
+  },
+})

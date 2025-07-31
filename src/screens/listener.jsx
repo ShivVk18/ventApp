@@ -1,77 +1,38 @@
-import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, RefreshControl } from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import GradientContainer from "../components/ui/GradientContainer";
-import StatusBar from "../components/ui/StatusBar";
-import Button from "../components/ui/Button";
-import RoomService from "../services/RoomService"; // Ensure this is the JS version
-import VoiceCallService from "../services/VoiceCallService"; // Ensure this is the JS version
-
-// JSDoc for Room type, as interfaces are not used in JS
-/**
- * @typedef {object} Room
- * @property {string} id
- * @property {string} venterId
- * @property {string} venterEmail
- * @property {string} ventText
- * @property {string} plan
- * @property {"waiting" | "active" | "ended"} status
- * @property {Date | null} createdAt // Now explicitly Date or null after toDate() conversion
- * @property {string} [listenerId]
- * @property {string} [listenerEmail]
- * @property {Date | null} [startTime] // Now explicitly Date or null after toDate() conversion
- * @property {Date | null} [endTime] // Now explicitly Date or null after toDate() conversion
- * @property {number} currentListeners
- * @property {number} maxListeners
- * @property {boolean} allowListeners
- * @property {any} lastActivity // Firebase Timestamp
- */
-
+import { useEffect, useState } from "react"
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, RefreshControl } from "react-native"
+import { useNavigation } from "@react-navigation/native"
+import GradientContainer from "../../components/ui/GradientContainer"
+import StatusBar from "../../components/ui/StatusBar"
+import Button from "../../components/ui/Button"
+import RoomService from "../../services/RoomService"
+import ZegoCallService from "../../services/ZegoCallService"
 
 export default function ListenerBrowserScreen() {
-  const navigation = useNavigation();
-
-  /** @type {[Room[], React.Dispatch<React.SetStateAction<Room[]>>]} */
-  const [availableRooms, setAvailableRooms] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const navigation = useNavigation()
+  const [availableRooms, setAvailableRooms] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
-    console.log("📡 Starting to listen for available rooms...");
-
+    console.log("📡 Starting to listen for available rooms...")
     const unsubscribe = RoomService.listenToAvailableRooms((rooms) => {
-      console.log("📡 Available rooms updated:", rooms.length);
-      setAvailableRooms(rooms);
-      setLoading(false);
-      setRefreshing(false);
-    });
+      console.log("📡 Available rooms updated:", rooms.length)
+      setAvailableRooms(rooms)
+      setLoading(false)
+      setRefreshing(false)
+    })
 
-    return () => unsubscribe();
-  }, []);
+    return () => unsubscribe()
+  }, [])
 
-  /**
-   * Handles joining a room as a listener.
-   * @param {Room} room - The room object to join.
-   */
   const handleJoinAsListener = async (room) => {
-    console.log("🎧 Attempting to join room as listener:", room.id);
-
-    // Check room availability
-    if (room.status === "ended") {
-      Alert.alert("Session Ended", "This vent session has already ended.");
-      return;
-    }
-
-    if (room.currentListeners >= room.maxListeners) {
-      Alert.alert("Session Full", "This vent session is already at maximum capacity.");
-      return;
-    }
+    console.log("🎧 Attempting to join room as listener:", room.id)
 
     // Request permissions first
-    const hasPermissions = await VoiceCallService.requestPermissions();
+    const hasPermissions = await ZegoCallService.requestPermissions()
     if (!hasPermissions) {
-      Alert.alert("Permission Required", "Microphone access is required to join voice sessions.");
-      return;
+      Alert.alert("Permission Required", "Microphone access is required to join voice sessions.")
+      return
     }
 
     Alert.alert(
@@ -84,112 +45,72 @@ export default function ListenerBrowserScreen() {
           onPress: async () => {
             try {
               // Join room in Firebase
-              const success = await RoomService.joinRoomAsListener(room.id);
+              const success = await RoomService.joinRoomAsListener(room.id)
               if (!success) {
-                Alert.alert("Error", "Failed to join the session.");
-                return;
+                Alert.alert("Error", "Failed to join the session.")
+                return
               }
 
-              console.log("✅ Navigating to voice call as listener");
+              console.log("✅ Navigating to voice call as listener")
               navigation.navigate("VoiceCall", {
-                channelName: room.id,
+                roomId: room.id,
                 isHost: false,
-                isListener: true,
                 ventText: room.ventText,
                 plan: room.plan,
-              });
+              })
             } catch (error) {
-              console.error("❌ Failed to join room:", error);
-              Alert.alert("Error", "Failed to join the session.");
+              console.error("❌ Failed to join room:", error)
+              Alert.alert("Error", "Failed to join the session.")
             }
           },
         },
       ],
-    );
-  };
+    )
+  }
 
   const handleRefresh = () => {
-    console.log("🔄 Refreshing room list...");
-    setRefreshing(true);
-    // The useEffect listener will automatically update `availableRooms` when new data comes.
-    // So, we just need to set `refreshing` to true, and it will be set to false by the listener.
-  };
+    console.log("🔄 Refreshing room list...")
+    setRefreshing(true)
+  }
 
-  /**
-   * Formats a date into a human-readable "time ago" string.
-   * @param {Date | null} date - The date to format.
-   * @returns {string} The formatted time ago string.
-   */
   const formatTimeAgo = (date) => {
-    if (!date) return "Unknown";
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
+    if (!date) return "Unknown"
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
 
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffMins < 1) return "Just now"
+    if (diffMins < 60) return `${diffMins}m ago`
 
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffHours = Math.floor(diffMins / 60)
+    if (diffHours < 24) return `${diffHours}h ago`
 
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}d ago`;
-  };
+    const diffDays = Math.floor(diffHours / 24)
+    return `${diffDays}d ago`
+  }
 
-  /**
-   * Returns status indicator properties for a room.
-   * @param {Room} room - The room object.
-   * @returns {{color: string, text: string, emoji: string}} Status information.
-   */
-  const getStatusIndicator = (room) => {
-    switch (room.status) {
-      case "waiting":
-        return { color: "#fbbf24", text: "WAITING", emoji: "⏳" };
-      case "active":
-        return { color: "#ef4444", text: "LIVE", emoji: "🔴" };
-      default:
-        return { color: "#6b7280", text: "UNKNOWN", emoji: "❓" };
-    }
-  };
-
-  /**
-   * Renders a single room item in the FlatList.
-   * @param {{ item: Room }} - The FlatList item object containing the room.
-   */
-  const renderRoomItem = ({ item: room }) => {
-    const statusInfo = getStatusIndicator(room);
-
-    return (
-      <TouchableOpacity style={styles.roomCard} onPress={() => handleJoinAsListener(room)}>
-        <View style={styles.roomHeader}>
-          <View style={styles.roomInfo}>
-            <Text style={styles.roomPlan}>{room.plan}</Text>
-            <Text style={styles.roomTime}>{formatTimeAgo(room.createdAt)}</Text>
-          </View>
-          <View style={styles.listenerCount}>
-            <Text style={styles.listenerText}>
-              👥 {room.currentListeners}/{room.maxListeners}
-            </Text>
-          </View>
+  const renderRoomItem = ({ item: room }) => (
+    <TouchableOpacity style={styles.roomCard} onPress={() => handleJoinAsListener(room)}>
+      <View style={styles.roomHeader}>
+        <View style={styles.roomInfo}>
+          <Text style={styles.roomPlan}>{room.plan}</Text>
+          <Text style={styles.roomTime}>{formatTimeAgo(room.createdAt)}</Text>
         </View>
-
-        <Text style={styles.ventText} numberOfLines={3}>
-          {room.ventText || "Anonymous vent session"}
-        </Text>
-
-        <View style={styles.roomFooter}>
-          <View style={styles.statusContainer}>
-            <View style={[styles.statusIndicator, { backgroundColor: statusInfo.color }]} />
-            <Text style={[styles.statusText, { color: statusInfo.color }]}>
-              {statusInfo.emoji} {statusInfo.text}
-            </Text>
-          </View>
-
-          <Text style={styles.joinText}>{room.status === "waiting" ? "Tap to join" : "Tap to listen"}</Text>
+        <View style={styles.statusContainer}>
+          <View style={styles.statusIndicator} />
+          <Text style={styles.statusText}>⏳ WAITING</Text>
         </View>
-      </TouchableOpacity>
-    );
-  };
+      </View>
+
+      <Text style={styles.ventText} numberOfLines={3}>
+        {room.ventText || "Anonymous vent session"}
+      </Text>
+
+      <View style={styles.roomFooter}>
+        <Text style={styles.joinText}>Tap to join as listener</Text>
+      </View>
+    </TouchableOpacity>
+  )
 
   if (loading) {
     return (
@@ -199,13 +120,12 @@ export default function ListenerBrowserScreen() {
           <Text style={styles.loadingText}>Finding active vent sessions...</Text>
         </View>
       </GradientContainer>
-    );
+    )
   }
 
   return (
     <GradientContainer>
       <StatusBar />
-
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>Live Vent Sessions</Text>
@@ -219,7 +139,6 @@ export default function ListenerBrowserScreen() {
               There are no live vent sessions right now.{"\n"}
               Check back later or start your own session!
             </Text>
-
             <Button
               title="Start Your Own Session"
               onPress={() => navigation.navigate("Vent")}
@@ -247,7 +166,7 @@ export default function ListenerBrowserScreen() {
         </View>
       </View>
     </GradientContainer>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -312,16 +231,21 @@ const styles = StyleSheet.create({
     color: "rgba(255, 255, 255, 0.6)",
     fontSize: 12,
   },
-  listenerCount: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+  statusContainer: {
+    flexDirection: "row",
+    alignItems: "center",
   },
-  listenerText: {
-    color: "white",
+  statusIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#fbbf24",
+    marginRight: 6,
+  },
+  statusText: {
+    color: "#fbbf24",
     fontSize: 12,
-    fontWeight: "500",
+    fontWeight: "bold",
   },
   ventText: {
     color: "rgba(255, 255, 255, 0.9)",
@@ -331,23 +255,7 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   roomFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-  },
-  statusContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  statusIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: "bold",
   },
   joinText: {
     color: "rgba(255, 255, 255, 0.7)",
@@ -386,4 +294,4 @@ const styles = StyleSheet.create({
   backButton: {
     backgroundColor: "rgba(255, 255, 255, 0.1)",
   },
-});
+})

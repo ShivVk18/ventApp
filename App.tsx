@@ -6,29 +6,29 @@ import Dashboardscreen from './src/screens/dashboard-screen';
 import Listener from './src/screens/listener';
 import SessionEnd from './src/screens/session-end';
 import Vent from './src/screens/vent';
-import VentSubmitted from './src/screens/vent-submitted';
+
 import VoiceCall from './src/screens/voice-call';
 import { AuthProvider } from './context/AuthContext';
 
 const Stack = createNativeStackNavigator();
 
-
-const StacknNavigator =  () => {
+const StacknNavigator = () => {
   return (
-    <Stack.Navigator initialRouteName="WelcomeScreen" screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="WelcomeScreen" component={WelcomeScreen}  />
+    <Stack.Navigator
+      initialRouteName="WelcomeScreen"
+      screenOptions={{ headerShown: false }}
+    >
+      <Stack.Screen name="WelcomeScreen" component={WelcomeScreen} />
       <Stack.Screen name="Dashboard" component={Dashboardscreen} />
       <Stack.Screen name="Listener" component={Listener} />
       <Stack.Screen name="Vent" component={Vent} />
-      <Stack.Screen name="VentSubmitted" component={VentSubmitted} />
       <Stack.Screen name="VoiceCall" component={VoiceCall} />
       <Stack.Screen name="SessionEnd" component={SessionEnd} />
     </Stack.Navigator>
   );
-}
+};
 
-const App = () =>  {
-  
+const App = () => {
   return (
     <AuthProvider>
       <NavigationContainer>
@@ -36,6 +36,6 @@ const App = () =>  {
       </NavigationContainer>
     </AuthProvider>
   );
-}
+};
 
 export default App;

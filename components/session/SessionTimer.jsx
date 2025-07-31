@@ -1,124 +1,85 @@
-import { View, Text, StyleSheet } from "react-native";
-import { useEffect, useState } from "react";
+import { View, Text, StyleSheet } from "react-native"
 
-// JSDoc for SessionTimerProps to document the component's props
-/**
- * @typedef {object} SessionTimerProps
- * @property {number} sessionTime - The total time elapsed in the session (in seconds).
- * @property {number} timeRemaining - The time left on the countdown timer (in seconds).
- * @property {string} plan - The name of the vent plan (e.g., "10-Min Vent").
- */
-
-/**
- * SessionTimer component displays the elapsed session time and remaining time.
- *
- * @param {SessionTimerProps} props - The props for the SessionTimer component.
- */
-const SessionTimer = ({ sessionTime, timeRemaining, plan }) => {
-  const [displayTime, setDisplayTime] = useState(sessionTime);
-
-  // Update displayTime whenever sessionTime or timeRemaining changes
-  useEffect(() => {
-    // Calculate elapsed time from the total session time minus remaining time
-    // This ensures that the displayTime accurately reflects how long the session has been active.
-    setDisplayTime(sessionTime - timeRemaining);
-  }, [sessionTime, timeRemaining]); // Dependencies: Re-run effect if these values change
-
-  /**
-   * Formats time from seconds into MM:SS string.
-   * @param {number} seconds - The time in seconds.
-   * @returns {string} Formatted time string (MM:SS).
-   */
+export default function SessionTimer({ sessionTime = 0, timeRemaining = 0, plan = "20-Min Vent" }) {
   const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+  }
 
-  /**
-   * Determines the color of the "Time Remaining" text based on the time left.
-   * @returns {string} Hex color code.
-   */
-  const getTimeRemainingColor = () => {
-    if (timeRemaining <= 60) return "#ef4444"; // Red for last minute
-    if (timeRemaining <= 300) return "#f59e0b"; // Orange for last 5 minutes
-    return "#4ade80"; // Green for normal time
-  };
+  const getProgressPercentage = () => {
+    const totalTime = sessionTime + timeRemaining
+    if (totalTime === 0) return 0
+    return (sessionTime / totalTime) * 100
+  }
 
   return (
     <View style={styles.container}>
-      <View style={styles.sessionTimeContainer}>
-        {/* Display the total elapsed time of the session */}
-        <Text style={styles.sessionTimeText}>{formatTime(displayTime)}</Text>
-        <Text style={styles.planText}>{plan}</Text>
+      <Text style={styles.planText}>{plan}</Text>
+
+      <View style={styles.timerContainer}>
+        <Text style={styles.timeText}>{formatTime(sessionTime)}</Text>
+        <Text style={styles.separatorText}>/</Text>
+        <Text style={styles.remainingText}>{formatTime(timeRemaining)}</Text>
       </View>
 
-      <View style={styles.timeRemainingContainer}>
-        <Text style={styles.timeRemainingLabel}>Time Remaining</Text>
-        {/* Display the countdown time, with dynamic color */}
-        <Text style={[styles.timeRemainingText, { color: getTimeRemainingColor() }]}>{formatTime(timeRemaining)}</Text>
-
-        {/* Show a warning if time remaining is 5 minutes or less, but not zero */}
-        {timeRemaining <= 300 && timeRemaining > 0 && (
-          <View style={styles.warningContainer}>
-            <Text style={styles.warningText}>⚠️ Session ending soon</Text>
-          </View>
-        )}
+      {/* Progress Bar */}
+      <View style={styles.progressBarContainer}>
+        <View style={[styles.progressBar, { width: `${getProgressPercentage()}%` }]} />
       </View>
+
+      <Text style={styles.labelText}>Session Time / Time Remaining</Text>
     </View>
-  );
-};
+  )
+}
 
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
-    marginVertical: 32,
-  },
-  sessionTimeContainer: {
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  sessionTimeText: {
-    color: "#ffffff",
-    fontSize: 48,
-    fontWeight: "bold",
-    fontFamily: "monospace", // Often used for digital displays
+    marginBottom: 30,
   },
   planText: {
-    color: "rgba(255, 255, 255, 0.8)",
+    color: "#4ade80",
     fontSize: 16,
-    textTransform: "capitalize",
-    marginTop: 8,
+    fontWeight: "bold",
+    marginBottom: 10,
   },
-  timeRemainingContainer: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    paddingVertical: 12,
-    paddingHorizontal: 28,
-    borderRadius: 16,
+  timerContainer: {
+    flexDirection: "row",
     alignItems: "center",
+    marginBottom: 15,
   },
-  timeRemainingLabel: {
-    color: "rgba(255, 255, 255, 0.7)",
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  timeRemainingText: {
-    fontSize: 24,
+  timeText: {
+    color: "white",
+    fontSize: 32,
     fontWeight: "bold",
     fontFamily: "monospace",
   },
-  warningContainer: {
-    marginTop: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    backgroundColor: "rgba(245, 158, 11, 0.2)", // A semi-transparent orange
-    borderRadius: 12,
+  separatorText: {
+    color: "rgba(255, 255, 255, 0.5)",
+    fontSize: 24,
+    marginHorizontal: 10,
   },
-  warningText: {
-    color: "#f59e0b", // Orange color
+  remainingText: {
+    color: "rgba(255, 255, 255, 0.7)",
+    fontSize: 32,
+    fontWeight: "bold",
+    fontFamily: "monospace",
+  },
+  progressBarContainer: {
+    width: 200,
+    height: 4,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    borderRadius: 2,
+    marginBottom: 8,
+  },
+  progressBar: {
+    height: "100%",
+    backgroundColor: "#4ade80",
+    borderRadius: 2,
+  },
+  labelText: {
+    color: "rgba(255, 255, 255, 0.6)",
     fontSize: 12,
-    fontWeight: "600",
   },
-});
-
-export default SessionTimer;
+})

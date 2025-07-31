@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+
+
+import { useState } from "react"
 import {
   View,
   Text,
@@ -12,127 +14,69 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import LinearGradient from "react-native-linear-gradient";
-import PaymentModal from "../../components/PaymentModal";
-import { useNavigation } from "@react-navigation/native";
-import { auth, firestore } from "../../config/firebase.config";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+} from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
+import LinearGradient from "react-native-linear-gradient"
+import PaymentModal from "../../components/PaymentModal"
+import { useNavigation } from "@react-navigation/native"
+import RoomService from "../../services/RoomService"
 
 const Vent = () => {
-  const navigation = useNavigation();
-  const [ventText, setVentText] = useState("");
-  const [modalVisible, setModalVisible] = useState(false);
-  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
-  const insets = useSafeAreaInsets();
+  const navigation = useNavigation()
+  const [ventText, setVentText] = useState("")
+  const [modalVisible, setModalVisible] = useState(false)
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false)
+  const insets = useSafeAreaInsets()
 
   const handlePaymentSuccess = async (plan) => {
-    console.log(`💳 Payment completed for plan: ${plan}`);
-    await createFirebaseRoom(plan);
-  };
+    console.log(`💳 Payment completed for plan: ${plan}`)
+    await createRoom(plan)
+  }
 
-  const createFirebaseRoom = async (plan) => {
-    console.log("🏗️ Starting Firebase room creation...", {
-      plan,
-      ventTextLength: ventText.trim().length,
-      userId: auth.currentUser?.uid
-    });
+  const createRoom = async (plan) => {
+    console.log("🏗️ Starting room creation...", { plan, ventTextLength: ventText.trim().length })
 
     if (ventText.trim() === "") {
-      console.log("❌ Vent text is empty");
-      Alert.alert("Empty Vent", "Vent text cannot be empty.");
-      return;
+      Alert.alert("Empty Vent", "Vent text cannot be empty.")
+      return
     }
 
-    setIsCreatingRoom(true);
+    setIsCreatingRoom(true)
+
     try {
-      const user = auth.currentUser;
-      if (!user) {
-        console.log("❌ No authenticated user found");
-        Alert.alert("Authentication Error", "You must be logged in to create a vent room.");
-        navigation.replace("DashboardScreen");
-        return;
-      }
+      const roomId = await RoomService.createRoom(ventText.trim(), plan)
 
-      console.log("✅ User authenticated:", {
-        uid: user.uid,
-        email: user.email
-      });
+      console.log("🎉 SUCCESS: Room created!", { roomId, plan })
 
-      const roomData = {
-        venterId: user.uid,
-        venterEmail: user.email,
-        ventText: ventText.trim(),
-        plan: plan,
-        status: "waiting", // Room starts in waiting state
-        createdAt: serverTimestamp(),
-        createdBy: user.email,
-        listenerId: null,
-        listenerEmail: null,
-        startTime: null,
-        allowListeners: true,
-        currentListeners: 0,
-        maxListeners: 2,
-        lastActivity: serverTimestamp()
-      };
+      setVentText("")
 
-      console.log("📝 Creating room with data:", {
-        ...roomData,
-        ventText: roomData.ventText.substring(0, 50) + (roomData.ventText.length > 50 ? "..." : "")
-      });
-
-      const newRoomRef = await addDoc(collection(firestore, "rooms"), roomData);
-      const roomId = newRoomRef.id;
-
-      console.log("🎉 SUCCESS: Firebase room created!", {
-        roomId,
-        status: "waiting",
-        plan
-      });
-
-      // Navigate to voice call as venter/host
-      console.log("🚀 Navigating to VoiceCall as VENTER:", {
-        channelName: roomId,
-        isHost: true,
-        isListener: false
-      });
-
-      setVentText("");
       navigation.navigate("VoiceCall", {
         ventText: ventText.trim(),
         plan,
-        channelName: roomId,
+        roomId,
         isHost: true,
-        isListener: false // Explicitly set to false for venter
-      });
-
+      })
     } catch (error) {
-      console.error("❌ Error creating Firebase room:", error);
-      Alert.alert("Room Creation Failed", error.message || "An error occurred while creating the room.");
+      console.error("❌ Error creating room:", error)
+      Alert.alert("Room Creation Failed", error.message || "An error occurred while creating the room.")
     } finally {
-      setIsCreatingRoom(false);
+      setIsCreatingRoom(false)
     }
-  };
+  }
 
   const handleSubmitVent = () => {
-    console.log("📝 User submitting vent:", {
-      textLength: ventText.trim().length,
-      isEmpty: ventText.trim() === ""
-    });
+    console.log("📝 User submitting vent:", { textLength: ventText.trim().length })
 
     if (ventText.trim() === "") {
-      console.log("❌ Empty vent submission blocked");
-      Alert.alert("Empty Vent", "Please type what's on your mind before submitting.");
-      return;
+      Alert.alert("Empty Vent", "Please type what's on your mind before submitting.")
+      return
     }
 
-    console.log("✅ Opening payment modal for vent submission");
-    setModalVisible(true);
-  };
+    setModalVisible(true)
+  }
 
   return (
-    <LinearGradient colors={['#1a1a40', '#0f0f2e']} style={styles.gradientContainer}>
+    <LinearGradient colors={["#1a1a40", "#0f0f2e"]} style={styles.gradientContainer}>
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <KeyboardAvoidingView
           style={styles.container}
@@ -160,10 +104,7 @@ const Vent = () => {
                   placeholderTextColor="rgba(255,255,255,0.5)"
                   multiline
                   value={ventText}
-                  onChangeText={(text) => {
-                    setVentText(text);
-                    console.log("📝 Vent text updated, length:", text.length);
-                  }}
+                  onChangeText={setVentText}
                   returnKeyType="done"
                   blurOnSubmit
                   textAlignVertical="top"
@@ -178,18 +119,13 @@ const Vent = () => {
               <View style={styles.buttonContainer}>
                 <TouchableOpacity
                   onPress={handleSubmitVent}
-                  style={[
-                    styles.submitButton,
-                    (!ventText.trim() || isCreatingRoom) && styles.disabledButton,
-                  ]}
+                  style={[styles.submitButton, (!ventText.trim() || isCreatingRoom) && styles.disabledButton]}
                   disabled={!ventText.trim() || isCreatingRoom}
                 >
                   {isCreatingRoom ? (
                     <>
                       <ActivityIndicator color="#fff" size="small" />
-                      <Text style={[styles.submitButtonText, { marginLeft: 8, color: "#fff" }]}>
-                        Creating Room...
-                      </Text>
+                      <Text style={[styles.submitButtonText, { marginLeft: 8, color: "#fff" }]}>Creating Room...</Text>
                     </>
                   ) : (
                     <Text style={styles.submitButtonText}>Submit</Text>
@@ -201,19 +137,16 @@ const Vent = () => {
 
           <PaymentModal
             visible={modalVisible}
-            onClose={() => {
-              console.log("💳 Payment modal closed");
-              setModalVisible(false);
-            }}
+            onClose={() => setModalVisible(false)}
             onPaymentSuccess={handlePaymentSuccess}
           />
         </KeyboardAvoidingView>
       </TouchableWithoutFeedback>
     </LinearGradient>
-  );
-};
+  )
+}
 
-export default Vent;
+export default Vent
 
 const styles = StyleSheet.create({
   gradientContainer: {
@@ -287,4 +220,4 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.5,
   },
-});
+})

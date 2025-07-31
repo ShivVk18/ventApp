@@ -50,14 +50,14 @@ const PaymentModal = ({ visible, onClose, onPaymentSuccess }) => {
         {
           text: 'Start Session',
           onPress: () => {
-            onPaymentSuccess(selectedPlan.name); // pass full plan object or selectedPlan.name
+            onPaymentSuccess(selectedPlan.name); 
             onClose();
           },
         },
       ]);
     }, 2000);
   };
-
+   console.log("📦 PaymentModal visibility:", visible);
   return (
     <Modal
       visible={visible}
