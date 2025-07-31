@@ -47,7 +47,7 @@ export default function ListenerBrowserScreen() {
 
     Alert.alert(
       "Join This Session?",
-      `Jump into: "${room.ventText?.slice(0, 50)}..."?\n\nYou'll be able to listen and gently support.`,
+      `Jump into: ${room.ventText?.slice(0, 50)}...?\n\nYoull be able to listen and gently support.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -149,7 +149,7 @@ export default function ListenerBrowserScreen() {
         <StatusBar />
         <View style={styles.loadingContainer}>
           <View style={styles.loadingContent}>
-            <Text style={styles.loadingEmoji}>🛰️</Text>
+            <Text style={styles.loadingEmoji}>🛰</Text>
             <Text style={styles.loadingText}>Scanning for open hearts...</Text>
           </View>
         </View>
