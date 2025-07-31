@@ -1,18 +1,16 @@
 import { useEffect, useState, useRef } from "react"
-import { View, Text, StyleSheet, Alert, BackHandler } from "react-native"
+import { View, Text, StyleSheet, Alert, BackHandler, Animated, Image } from "react-native"
 import { useNavigation, useRoute } from "@react-navigation/native"
 import GradientContainer from "../../components/ui/GradientContainer"
-import StatusBar from "../../components/ui/StatusBar"
-import SessionTimer from "../../components/session/SessionTimer"
+import SthatatusBar from "../../components/ui/StatusBar"
 import VoiceControls from "../../components/voice/VoiceControl"
 import useTimer from "../../hooks/useTimer"
 import ZegoExpressService from "../../services/ZegoExpressService"
 import RoomService from "../../services/RoomService"
 import { auth } from "../../config/firebase.config"
 
-// Replace with your ZegoCloud credentials
-const ZEGO_APP_ID = 348919014 // Your App ID
-const ZEGO_APP_SIGN = "3e1bd2e901019273151648fbb35d45e912425fcf93e07e38a571dca4c58688d1" 
+const ZEGO_APP_ID = 348919014
+const ZEGO_APP_SIGN = "3e1bd2e901019273151648fbb35d45e912425fcf93e07e38a571dca4c58688d1"
 
 export default function VoiceCallScreen() {
   const navigation = useNavigation()
@@ -29,13 +27,17 @@ export default function VoiceCallScreen() {
   const [soundLevels, setSoundLevels] = useState({})
   const [networkQuality, setNetworkQuality] = useState({})
 
+  // Animation refs
+  const listenerFadeAnim = useRef(new Animated.Value(0)).current
+  const venterPulseAnim = useRef(new Animated.Value(1)).current
+
   const roomUnsubscribeRef = useRef(null)
   const callEndedRef = useRef(false)
 
   const initialCallDuration = RoomService.getDurationInSeconds(plan)
 
   const handleTimeUp = () => {
-    Alert.alert("Session Ended", "Your session has ended automatically.", [
+    Alert.alert("Session Ended", "Your session has ended.", [
       {
         text: "OK",
         onPress: async () => {
@@ -55,13 +57,44 @@ export default function VoiceCallScreen() {
     return true
   }
 
+  // Format time display
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+  }
+
+  // Animate listener joining
+  const animateListenerJoin = () => {
+    Animated.timing(listenerFadeAnim, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start()
+  }
+
+  // Animate venter speaking
+  const animateVenterSpeaking = () => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(venterPulseAnim, {
+          toValue: 1.05,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(venterPulseAnim, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start()
+  }
+
   const initializeVoiceCall = async () => {
     try {
-      console.log("🎬 Initializing voice call...", { roomId, isHost })
-
       setConnectionStatus("requesting_permissions")
 
-      // Request permissions
       const hasPermissions = await ZegoExpressService.requestPermissions()
       if (!hasPermissions) {
         Alert.alert("Permission Required", "Microphone access is required for voice calls.", [
@@ -72,7 +105,6 @@ export default function VoiceCallScreen() {
 
       setConnectionStatus("initializing")
 
-      // Create engine
       const engineCreated = await ZegoExpressService.createEngine(ZEGO_APP_ID, ZEGO_APP_SIGN)
       if (!engineCreated) {
         throw new Error("Failed to create ZegoExpressEngine")
@@ -80,7 +112,6 @@ export default function VoiceCallScreen() {
 
       setConnectionStatus("connecting")
 
-      // Login to room
       const user = auth.currentUser
       const userID = user?.uid || `user_${Math.floor(Math.random() * 10000)}`
       const userName = user?.email || `User_${userID.slice(0, 6)}`
@@ -97,7 +128,6 @@ export default function VoiceCallScreen() {
         throw new Error("Failed to join voice room")
       }
 
-      // Enable audio volume evaluation
       await ZegoExpressService.enableAudioVolumeEvaluation(true)
     } catch (error) {
       console.error("❌ Voice call initialization failed:", error)
@@ -110,10 +140,7 @@ export default function VoiceCallScreen() {
   }
 
   const handleRoomStateUpdate = (state, errorCode) => {
-    console.log("🏠 Room state update:", { state, errorCode })
-
     if (errorCode !== 0) {
-      console.error("❌ Room error:", errorCode)
       setConnectionStatus("failed")
       return
     }
@@ -122,6 +149,9 @@ export default function VoiceCallScreen() {
       case "CONNECTED":
         setConnectionStatus("connected")
         setIsJoined(true)
+        if (isHost) {
+          animateVenterSpeaking()
+        }
         break
       case "CONNECTING":
         setConnectionStatus("connecting")
@@ -133,20 +163,18 @@ export default function VoiceCallScreen() {
   }
 
   const handleUserUpdate = (updateType, userList) => {
-    console.log("👥 User update:", { updateType, userCount: userList.length })
-
     if (updateType === 0) {
-      // User added
       setRemoteUsers((prev) => [...prev, ...userList])
+      if (userList.length > 0) {
+        animateListenerJoin()
+      }
     } else {
-      // User removed
       const removedUserIDs = userList.map((user) => user.userID)
       setRemoteUsers((prev) => prev.filter((user) => !removedUserIDs.includes(user.userID)))
     }
   }
 
   const handleStreamUpdate = (updateType, streamList) => {
-    console.log("🌊 Stream update:", { updateType, streamCount: streamList.length })
     // ZegoExpressService handles stream playback internally
   }
 
@@ -203,20 +231,14 @@ export default function VoiceCallScreen() {
   }
 
   const performEndCall = async (autoEnded) => {
-    console.log("👋 Ending call...", { autoEnded })
-
     try {
       stopTimer()
-
-      // Leave voice room
       await ZegoExpressService.destroy()
 
-      // Update Firebase room
       if (isHost) {
         await RoomService.endRoom(roomId)
       }
 
-      // Navigate to session end screen
       navigation.replace("SessionEnd", {
         sessionTime,
         plan,
@@ -231,11 +253,9 @@ export default function VoiceCallScreen() {
   useEffect(() => {
     initializeVoiceCall()
 
-    // Handle Android back button
     const backHandler = BackHandler.addEventListener("hardwareBackPress", handleBackPress)
 
     return () => {
-      console.log("🧹 Cleaning up voice call...")
       stopTimer()
       ZegoExpressService.destroy()
       backHandler.remove()
@@ -245,7 +265,6 @@ export default function VoiceCallScreen() {
     }
   }, [])
 
-  // Room status listener
   useEffect(() => {
     if (roomId && isJoined) {
       roomUnsubscribeRef.current = RoomService.listenToRoom(roomId, (room) => {
@@ -264,29 +283,85 @@ export default function VoiceCallScreen() {
     }
   }, [roomId, isJoined, navigation])
 
-  // Get remote streams count
   const remoteStreamsCount = ZegoExpressService.getRemoteStreamsCount()
+
+  console.log(plan)
 
   return (
     <GradientContainer>
+      <View style={styles.backgroundElements}>
+        <View style={[styles.floatingCircle, styles.circle1]} />
+        <View style={[styles.floatingCircle, styles.circle2]} />
+        <View style={[styles.floatingCircle, styles.circle3]} />
+      </View>
       <StatusBar />
       <View style={styles.container}>
-        <SessionTimer sessionTime={sessionTime} timeRemaining={timeRemaining} plan={plan} />
-
-        <View style={styles.ventContainer}>
-          <Text style={styles.ventLabel}>{isHost ? "Your Vent:" : "Listening to:"}</Text>
-          <Text style={styles.ventTextDisplay}>{ventText}</Text>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.anonymousText}>You are anonymous</Text>
         </View>
 
-        <View style={styles.participantsContainer}>
-          <Text style={styles.participantsText}>
-            👥 {remoteStreamsCount + 1} participant{remoteStreamsCount !== 0 ? "s" : ""} connected
-          </Text>
-          {isHost && remoteStreamsCount === 0 && (
-            <Text style={styles.waitingText}>Waiting for a listener to join...</Text>
+        {/* Venter Avatar */}
+        <View style={styles.venterContainer}>
+          <Animated.View
+            style={[styles.participantAvatar, styles.venterAvatar, { transform: [{ scale: venterPulseAnim }] }]}
+          >
+            <Image source={require("../../assets/venter.jpeg")} style={styles.avatarImage} />
+          </Animated.View>
+          <Text style={styles.statusText}>{isHost ? "Speaking..." : "Listening..."}</Text>
+          {isHost && (
+            <View style={styles.youIndicator}>
+              <Text style={styles.youText}>You</Text>
+            </View>
           )}
         </View>
 
+        {/* Timer & Vent Text */}
+        <View style={styles.timerContainer}>
+          <Text style={styles.planText}>{plan} vent</Text>
+          <Text style={styles.timerText}>{formatTime(sessionTime)}</Text>
+          <Text style={styles.timerSubtext}>
+            {remoteStreamsCount > 0 ? "Connected with a listener. You begin" : "Waiting for listener..."}
+          </Text>
+
+          {/* Vent Text */}
+          {ventText && (
+            <View style={styles.ventTextContainer}>
+              <Text style={styles.ventLabel}>{isHost ? "Your Vent:" : "Listening to:"}</Text>
+              <Text style={styles.ventText} numberOfLines={2} ellipsizeMode="tail">
+                "{ventText}"
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Listener Avatar */}
+        <View style={styles.listenerContainer}>
+          <Animated.View
+            style={[
+              styles.participantAvatar,
+              styles.listenerAvatar,
+              {
+                opacity: remoteStreamsCount > 0 ? listenerFadeAnim : 0.3,
+                transform: [
+                  {
+                    scale: remoteStreamsCount > 0 ? listenerFadeAnim : 0.8,
+                  },
+                ],
+              },
+            ]}
+          >
+            <Image source={require("../../assets/listener.png")} style={styles.avatarImage} />
+          </Animated.View>
+          <Text style={styles.statusText}>{remoteStreamsCount > 0 ? "Listening..." : "Waiting..."}</Text>
+          {!isHost && remoteStreamsCount > 0 && (
+            <View style={styles.youIndicator}>
+              <Text style={styles.youText}>You</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Voice Controls */}
         <VoiceControls
           muted={isMuted}
           speakerMuted={isSpeakerMuted}
@@ -302,43 +377,192 @@ export default function VoiceCallScreen() {
 }
 
 const styles = StyleSheet.create({
+  backgroundElements: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  floatingCircle: {
+    position: "absolute",
+    borderRadius: 100,
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+  },
+  circle1: {
+    width: 120,
+    height: 120,
+    top: "15%",
+    right: -30,
+  },
+  circle2: {
+    width: 80,
+    height: 80,
+    top: "60%",
+    left: -20,
+  },
+  circle3: {
+    width: 200,
+    height: 200,
+    bottom: "10%",
+    right: -60,
+  },
+
   container: {
     flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 15,
+    paddingBottom: 15,
+    justifyContent: "space-between",
+  },
+
+  // Header
+  header: {
+    alignItems: "center",
+    paddingVertical: 5,
+  },
+
+  anonymousText: {
+    color: "rgba(255, 255, 255, 0.7)",
+    fontSize: 15,
+    fontWeight: "500",
+    letterSpacing: 0.5,
+  },
+
+  // Venter (Top)
+  venterContainer: {
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+
+  // Listener (Bottom)
+  listenerContainer: {
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+
+  // Participant Avatars
+  participantAvatar: {
+    width: 95,
+    height: 95,
+    borderRadius: 47.5,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 20,
-  },
-  ventContainer: {
-    alignItems: "center",
-    marginBottom: 30,
-    paddingHorizontal: 20,
-  },
-  ventLabel: {
-    color: "rgba(255, 255, 255, 0.6)",
-    fontSize: 14,
     marginBottom: 8,
-    textAlign: "center",
+    borderWidth: 2.5,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 6,
   },
-  ventTextDisplay: {
+
+  venterAvatar: {
+    borderColor: "#3b82f6",
+    backgroundColor: "rgba(59, 130, 246, 0.08)",
+  },
+
+  listenerAvatar: {
+    borderColor: "#10b981",
+    backgroundColor: "rgba(16, 185, 129, 0.08)",
+  },
+
+  avatarImage: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+  },
+
+  statusText: {
     color: "rgba(255, 255, 255, 0.9)",
-    fontSize: 16,
-    textAlign: "center",
-    fontStyle: "italic",
-    lineHeight: 22,
-    maxHeight: 100,
-  },
-  participantsContainer: {
-    alignItems: "center",
-    marginBottom: 40,
-  },
-  participantsText: {
-    color: "rgba(255, 255, 255, 0.8)",
     fontSize: 14,
-    marginBottom: 5,
+    fontWeight: "600",
+    marginBottom: 4,
+    letterSpacing: 0.3,
   },
-  waitingText: {
+
+  youIndicator: {
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 0.5,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+  },
+
+  youText: {
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.3,
+  },
+
+  // Timer & Vent Container
+  timerContainer: {
+    alignItems: "center",
+    paddingVertical: 15,
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    borderRadius: 18,
+    marginHorizontal: 8,
+    borderWidth: 0.5,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+  },
+
+  planText: {
+    color: "rgba(255, 255, 255, 0.8)",
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 4,
+    textTransform: "capitalize",
+    letterSpacing: 0.5,
+  },
+
+  timerText: {
+    color: "#FFFFFF",
+    fontSize: 28,
+    fontWeight: "200",
+    fontFamily: "monospace",
+    marginBottom: 4,
+    letterSpacing: 1.2,
+  },
+
+  timerSubtext: {
     color: "rgba(255, 255, 255, 0.6)",
     fontSize: 12,
+    fontWeight: "500",
+    textAlign: "center",
+    paddingHorizontal: 12,
+    lineHeight: 16,
+    marginBottom: 8,
+  },
+
+  // Vent Text
+  ventTextContainer: {
+    width: "100%",
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    borderTopWidth: 0.5,
+    borderTopColor: "rgba(255, 255, 255, 0.1)",
+  },
+
+  ventLabel: {
+    color: "rgba(255, 255, 255, 0.7)",
+    fontSize: 11,
+    fontWeight: "600",
+    marginBottom: 4,
+    textAlign: "center",
+    letterSpacing: 0.5,
+  },
+
+  ventText: {
+    color: "rgba(255, 255, 255, 0.85)",
+    fontSize: 13,
     fontStyle: "italic",
+    textAlign: "center",
+    lineHeight: 18,
+    fontWeight: "400",
   },
 })

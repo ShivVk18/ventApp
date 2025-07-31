@@ -267,16 +267,12 @@ class ZegoExpressService {
     if (!this.isInitialized || !this.engine) return false
 
     try {
-      // The correct API for Zego Express is enableSoundLevelMonitor
+      
       await this.engine.startSoundLevelMonitor({
-      enableVUMeter: enable, // Use enableVUMeter for enabling/disabling the sound level monitor
-      // Zego documentation states 'enable_vumeter', but it's common for JS/TS bindings to use camelCase.
-      // If 'enableVUMeter' doesn't work, try 'enable_vumeter'.
-      // However, the error message indicates the *type* of argument, not the property name within the object.
-      // The primary issue is passing a boolean instead of an object.
+      enableVUMeter: enable, 
+      
       interval: interval,
-      // You might also have other properties like `enableSpeaker` or `enableMic`,
-      // but for basic sound level monitoring, `enableVUMeter` and `interval` are key.
+     
     })
       console.log(`🔊 Audio volume evaluation ${enable ? "enabled" : "disabled"}`)
       return true

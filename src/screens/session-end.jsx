@@ -38,15 +38,15 @@ export default function SessionEnd() {
   const getEndMessage = () => {
     if (isAutoEnded) {
       return {
-        title: "Time's Up!",
+        title: "Time’s Up!",
         subtitle:
-          'Your 20-minute session has ended automatically.\nThanks for sharing.',
+          "You just wrapped up a full 20-minute vent session! 💬\nTake a deep breath—you did amazing!",
         emoji: '⏰',
       };
     }
     return {
-      title: 'Session ended',
-      subtitle: 'Thanks for sharing.',
+      title: "Vent Complete!",
+      subtitle: 'That was powerful.\nThanks for opening up and letting it out. 💙',
       emoji: '✌️',
     };
   };
@@ -55,10 +55,16 @@ export default function SessionEnd() {
 
   return (
     <GradientContainer>
+      <View style={styles.backgroundElements}>
+        <View style={[styles.floatingCircle, styles.circle1]} />
+        <View style={[styles.floatingCircle, styles.circle2]} />
+        <View style={[styles.floatingCircle, styles.circle3]} />
+      </View>
+
       <StatusBar />
 
       <View style={styles.content}>
-        <Text style={styles.anonymousText}>You are anonymous</Text>
+        <Text style={styles.anonymousText}>You're totally anonymous 🔒</Text>
 
         <View style={styles.mainContent}>
           <View style={styles.emojiContainer}>
@@ -70,12 +76,12 @@ export default function SessionEnd() {
 
           <View style={styles.sessionStats}>
             <Text style={styles.sessionDuration}>
-              Session Duration: {formatTime(sessionTimeNum)}
+              🕒 Session Duration: {formatTime(sessionTimeNum)}
             </Text>
             <Text style={styles.sessionPlan}>Plan: {plan}</Text>
             {isAutoEnded && (
               <Text style={styles.autoEndedText}>
-                Session ended automatically after 20 minutes
+                ⏳ You stayed till the end! Your session ended automatically after 20 minutes.
               </Text>
             )}
           </View>
@@ -86,11 +92,11 @@ export default function SessionEnd() {
             style={styles.newVentButton}
             onPress={handleNewVent}
           >
-            <Text style={styles.newVentButtonText}>New Vent</Text>
+            <Text style={styles.newVentButtonText}>Start Another Vent 🚀</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.homeButton} onPress={handleGoHome}>
-            <Text style={styles.homeButtonText}>Go Home</Text>
+            <Text style={styles.homeButtonText}>Back to Dashboard 🏠</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -102,6 +108,36 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 30,
+  },
+  backgroundElements: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  floatingCircle: {
+    position: 'absolute',
+    borderRadius: 100,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+  },
+  circle1: {
+    width: 120,
+    height: 120,
+    top: '15%',
+    right: -30,
+  },
+  circle2: {
+    width: 80,
+    height: 80,
+    top: '60%',
+    left: -20,
+  },
+  circle3: {
+    width: 200,
+    height: 200,
+    bottom: '10%',
+    right: -60,
   },
   anonymousText: {
     color: 'rgba(255, 255, 255, 0.7)',
@@ -128,7 +164,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   subtitle: {
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: 'rgba(255, 255, 255, 0.85)',
     fontSize: 18,
     textAlign: 'center',
     marginBottom: 30,
@@ -138,12 +174,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sessionDuration: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255, 255, 255, 0.8)',
     fontSize: 16,
     marginBottom: 5,
   },
   sessionPlan: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255, 255, 255, 0.75)',
     fontSize: 16,
     textTransform: 'capitalize',
     marginBottom: 5,
