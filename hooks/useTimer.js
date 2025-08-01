@@ -1,4 +1,4 @@
-// Removed "use client" as it's not standard for pure React Native projects.
+
 
 import { useState, useEffect, useRef } from "react";
 

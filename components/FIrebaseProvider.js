@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { View, Text, StyleSheet } from "react-native"
-import { auth } from "../../../../Users/tanush sahu/Downloads/ventApp/ventApp/config/firebase.config"
+import { auth } from "../config/firebase.config"
 import { onAuthStateChanged } from "firebase/auth"
 
 const FirebaseProvider = ({ children }) => {

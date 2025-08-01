@@ -25,6 +25,7 @@ export default function VoiceCallScreen() {
   const navigation = useNavigation();
   const route = useRoute();
 
+
   const { ventText, plan, roomId, isHost } = route.params;
 
   // State management
@@ -594,6 +595,7 @@ useEffect(() => {
 }, [isJoined, connectionStatus, remoteUsers.length, remoteStreamsCount]);
 
   return (
+
     <GradientContainer>
       <View style={styles.backgroundElements}>
         <View style={[styles.floatingCircle, styles.circle1]} />
@@ -633,8 +635,9 @@ useEffect(() => {
 
         {/* Timer & Vent Text */}
         <View style={styles.timerContainer}>
-          <Text style={styles.planText}>{plan} vent</Text>
+          <Text style={styles.planText}>{plan}</Text>
           <Text style={styles.timerText}>{formatTime(sessionTime)}</Text>
+          <Text style={styles.timerRemainingText}>time remaining : {formatTime(timeRemaining)}</Text>
           <Text style={styles.timerSubtext}>
             {isJoined
               ? remoteStreamsCount > 0 || !isHost
@@ -868,6 +871,15 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     letterSpacing: 1.2,
   },
+  
+  timerRemainingText: {
+    color: '#e41212ff',
+    fontSize: 12
+,    fontWeight: '50',
+    fontFamily: 'center',
+    marginBottom: 4,
+    letterSpacing: 1.2,
+  },
 
   timerSubtext: {
     color: 'rgba(255, 255, 255, 0.6)',
@@ -898,11 +910,12 @@ const styles = StyleSheet.create({
   },
 
   ventText: {
-    color: 'rgba(255, 255, 255, 0.85)',
+    color: 'rgba(34, 157, 176, 0.85)',
     fontSize: 13,
     fontStyle: 'italic',
     textAlign: 'center',
     lineHeight: 18,
     fontWeight: '400',
+    fontStyle : 'bold',
   },
 });

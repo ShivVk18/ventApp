@@ -91,8 +91,8 @@ const Vent = () => {
           <ScrollView
             contentContainerStyle={{
               flexGrow: 1,
-              paddingTop: 40, // GradientContainer अब paddingTop को संभालेगा, इसे यहाँ से हटा दें
-              paddingBottom: 30, // GradientContainer अब paddingBottom को संभालेगा, इसे यहाँ से हटा दें
+              paddingTop: 40, 
+              paddingBottom: 30, 
             }}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
